@@ -38,6 +38,7 @@ jobs:
           npm install -g windows-build-tools
           npm install -g npm@latest
           npm install -g node-gyp
+          npm install -g @electron/rebuild
           node-gyp install
 
       - name: Install dependencies
@@ -47,7 +48,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: |
           SET CL='/std:c++17'
-          electron-rebuild -m ./node_modules/robotjs
+          npx electron-rebuilds -m ./node_modules/robotjs
 
       - name: Run Playwright tests (Linux)
         if: matrix.os == 'ubuntu-latest'
