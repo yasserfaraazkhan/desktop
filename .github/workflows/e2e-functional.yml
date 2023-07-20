@@ -9,7 +9,7 @@ on:
       - master
 
 jobs:
-  e2e-macos:
+  e2e-linux:
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -44,13 +44,14 @@ jobs:
           docker run -d -p 8065:8065 mattermostdevelopment/mm-ee-test:test
 
           # Add a check to wait for Mattermost server to be responsive
-          for i in {1..10}; do
+          max_attempts=30
+          for i in $(seq $max_attempts); do
             if curl -s http://localhost:8065/api/v4/system/ping | grep -q "Pong"; then
               echo "Mattermost server is up and running."
               break
             else
-              echo "Waiting for Mattermost server to be responsive..."
-              sleep 10
+              echo "Waiting for Mattermost server to be responsive... Attempt $i of $max_attempts"
+              sleep 30
             fi
           done
 
