@@ -30,17 +30,40 @@ jobs:
 
 #   Linux
 
-      - name: Install packages (Linux)
+      - name: Install packages (Ubuntu OS)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get install libxtst-dev libpng++-dev
           sudo apt-get update
           sudo apt-get install -y xvfb
 
+      - name: Pull Mattermost Docker image and run the Mattermost server
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          docker pull mattermostdevelopment/mm-ee-test:test
+          docker run -d -p 8065:8065 mattermostdevelopment/mm-ee-test:test
+
+          # Add a check to wait for Mattermost server to be responsive
+          for i in {1..10}; do
+            if curl -s http://localhost:8065/api/v4/system/ping | grep -q "Pong"; then
+              echo "Mattermost server is up and running."
+              break
+            else
+              echo "Waiting for Mattermost server to be responsive..."
+              sleep 10
+            fi
+          done
+
+          # If the server is still not responsive, consider it as a failure
+          if ! curl -s http://localhost:8065/api/v4/system/ping | grep -q "Pong"; then
+            echo "Mattermost server did not start correctly."
+            exit 1
+          fi
+          
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Playwright tests (Linux)
+      - name: Run Playwright tests (Ubuntu OS)
         if: matrix.os == 'ubuntu-latest'
         run: |
           export DISPLAY=:99
@@ -50,7 +73,7 @@ jobs:
 
 #   Windows
 
-      - name: Install packages (Windows)
+      - name: Install packages (Windows OS)
         if: matrix.os == 'windows-latest'
         run: |
           npm install -g windows-build-tools
@@ -59,7 +82,7 @@ jobs:
           npm install -g @electron/rebuild
           node-gyp install
 
-      - name: Rebuild robotjs (Windows)
+      - name: Rebuild robotjs (Windows OS)
         if: matrix.os == 'windows-latest'
         run: |
           SET CL='/std:c++17'
@@ -80,7 +103,7 @@ jobs:
           npm run test:e2e:send-report
 
       - name: Upload Mochawesome Report
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3.1.2
         with:
           name: mochawesome-report
           path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
