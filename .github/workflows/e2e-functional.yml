@@ -64,7 +64,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           npm run test:e2e || true
-          npm run test:e2e:send-report
+          # npm run test:e2e:send-report
 
       - name: Run Playwright tests (Windows OS)
         if: matrix.os == 'windows-latest'
@@ -127,7 +127,7 @@ jobs:
           export DISPLAY=:99
           Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
           npm run test:e2e || true
-          npm run test:e2e:send-report
+          # npm run test:e2e:send-report
 
       - name: Run Playwright tests (Mac OS)
         if: matrix.os == 'macos-latest'
@@ -147,71 +147,71 @@ jobs:
           name: mochawesome-report
           path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
 
-  e2e-windows:
-    runs-on: ${{ matrix.os }}
+  # e2e-windows:
+  #   runs-on: ${{ matrix.os }}
 
-    strategy:
-      matrix:
-        os: [windows-latest] #,  ubuntu-latest, windows-latest]
-        node-version: [18.x]
+  #   strategy:
+  #     matrix:
+  #       os: [windows-latest] #,  ubuntu-latest, windows-latest]
+  #       node-version: [18.x]
 
-    steps:
+  #   steps:
 
-      - name: Check out code
-        uses: actions/checkout@v3.5.3
+  #     - name: Check out code
+  #       uses: actions/checkout@v3.5.3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3.7.0
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+  #     - name: Set up Node.js
+  #       uses: actions/setup-node@v3.7.0
+  #       with:
+  #         node-version: ${{ matrix.node-version }}
+  #         cache: 'npm'
 
-      - name: Install packages (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install libxtst-dev libpng++-dev
+  #     - name: Install packages (Linux)
+  #       if: matrix.os == 'ubuntu-latest'
+  #       run: sudo apt-get install libxtst-dev libpng++-dev
 
-      - name: Install packages (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          npm install -g windows-build-tools
-          npm install -g npm@latest
-          npm install -g node-gyp
-          npm install -g @electron/rebuild
-          node-gyp install
+  #     - name: Install packages (Windows)
+  #       if: matrix.os == 'windows-latest'
+  #       run: |
+  #         npm install -g windows-build-tools
+  #         npm install -g npm@latest
+  #         npm install -g node-gyp
+  #         npm install -g @electron/rebuild
+  #         node-gyp install
 
-      - name: Install dependencies
-        run: npm ci
+  #     - name: Install dependencies
+  #       run: npm ci
 
-      - name: Rebuild robotjs (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          SET CL='/std:c++17'
-          npx electron-rebuilds -m ./node_modules/robotjs
+  #     - name: Rebuild robotjs (Windows)
+  #       if: matrix.os == 'windows-latest'
+  #       run: |
+  #         SET CL='/std:c++17'
+  #         npx electron-rebuilds -m ./node_modules/robotjs
 
-      - name: Run Playwright tests (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-          export DISPLAY=:99
-          Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
-          npm run test:e2e
-          npm run test:e2e:send-report
+  #     - name: Run Playwright tests (Linux)
+  #       if: matrix.os == 'ubuntu-latest'
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y xvfb
+  #         export DISPLAY=:99
+  #         Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
+  #         npm run test:e2e
+  #         npm run test:e2e:send-report
 
-      - name: Run Playwright tests (Mac OS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          npm run test:e2e
-          npm run test:e2e:send-report
+  #     - name: Run Playwright tests (Mac OS)
+  #       if: matrix.os == 'macos-latest'
+  #       run: |
+  #         npm run test:e2e
+  #         npm run test:e2e:send-report
 
-      - name: Run Playwright tests (Windows OS)
-        if: matrix.os == 'windows-latest'
-        run: |
-          npm run test:e2e || true
-          npm run test:e2e:send-report
+  #     - name: Run Playwright tests (Windows OS)
+  #       if: matrix.os == 'windows-latest'
+  #       run: |
+  #         npm run test:e2e || true
+  #         npm run test:e2e:send-report
 
-      - name: Upload Mochawesome Report
-        uses: actions/upload-artifact@v2
-        with:
-          name: mochawesome-report
-          path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
+  #     - name: Upload Mochawesome Report
+  #       uses: actions/upload-artifact@v2
+  #       with:
+  #         name: mochawesome-report
+  #         path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
