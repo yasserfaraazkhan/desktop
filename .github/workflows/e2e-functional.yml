@@ -40,8 +40,8 @@ jobs:
       - name: Pull Mattermost Docker image and run the Mattermost server
         if: matrix.os == 'ubuntu-latest'
         run: |
-          docker pull mattermost/mattermost-preview
-          docker run -d -p 8065:8065 mattermost/mattermost-preview
+          docker pull mattermost/mattermost-enterprise-edition
+          docker run -d -p 8065:8065 mattermost/mattermost-enterprise-edition
 
           # Add a check to wait for Mattermost server to be responsive
           max_attempts=30
