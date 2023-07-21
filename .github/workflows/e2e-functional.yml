@@ -9,57 +9,57 @@ on:
       - master
 
 jobs:
-  e2e-linux:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest] #,  ubuntu-latest, windows-latest]
-        node-version: [18.x]
+  # e2e-linux:
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-latest] #,  ubuntu-latest, windows-latest]
+  #       node-version: [18.x]
 
-    steps:
+  #   steps:
 
-      - name: Check out code
-        uses: actions/checkout@v3.5.3
+  #     - name: Check out code
+  #       uses: actions/checkout@v3.5.3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3.7.0
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+  #     - name: Set up Node.js
+  #       uses: actions/setup-node@v3.7.0
+  #       with:
+  #         node-version: ${{ matrix.node-version }}
+  #         cache: 'npm'
 
-      - name: Install packages (Ubuntu OS)
-        run: |
-          sudo apt-get install libxtst-dev libpng++-dev
-          sudo apt-get update
-          sudo apt-get install -y xvfb
+  #     - name: Install packages (Ubuntu OS)
+  #       run: |
+  #         sudo apt-get install libxtst-dev libpng++-dev
+  #         sudo apt-get update
+  #         sudo apt-get install -y xvfb
 
-      - name: Checkout mattermost
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-        with:
-          repository: mattermost/mattermost
-          path: mattermost
+  #     - name: Checkout mattermost
+  #       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+  #       with:
+  #         repository: mattermost/mattermost
+  #         path: mattermost
 
-      - name: Run mattermsot server
-        run: |
-          cd mattermost/e2e-tests
-          echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
-          make start-server && make prepare-server
+  #     - name: Run mattermsot server
+  #       run: |
+  #         cd mattermost/e2e-tests
+  #         echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
+  #         make start-server && make prepare-server
 
-      - name: Install dependencies
-        run: npm ci
+  #     - name: Install dependencies
+  #       run: npm ci
 
-      - name: Run Playwright tests (Ubuntu OS)
-        run: |
-          export DISPLAY=:99
-          Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
-          npm run test:e2e || true
-          # npm run test:e2e:send-report
+  #     - name: Run Playwright tests (Ubuntu OS)
+  #       run: |
+  #         export DISPLAY=:99
+  #         Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
+  #         npm run test:e2e || true
+  #         # npm run test:e2e:send-report
 
-      - name: Upload Mochawesome Report
-        uses: actions/upload-artifact@v3.1.2
-        with:
-          name: mochawesome-report
-          path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
+  #     - name: Upload Mochawesome Report
+  #       uses: actions/upload-artifact@v3.1.2
+  #       with:
+  #         name: mochawesome-report
+  #         path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
 
   e2e-macos:
       runs-on: ${{ matrix.os }}
@@ -77,6 +77,9 @@ jobs:
           with:
             node-version: ${{ matrix.node-version }}
             cache: 'npm'
+
+        - name: Setup Docker (macOS)
+          uses: docker/setup-buildx-action@v1
 
         - name: Checkout mattermost
           uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
@@ -97,3 +100,9 @@ jobs:
           run: |
             npm run test:e2e || true
             # npm run test:e2e:send-report
+
+        - name: Upload Mochawesome Report
+          uses: actions/upload-artifact@v3.1.2
+          with:
+            name: mochawesome-report
+            path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
