@@ -246,9 +246,9 @@ module.exports = {
     },
 
     async loginToMattermost(window) {
-        await window.waitForSelector('#input_loginId');
-        await window.waitForSelector('#input_password-input');
-        await window.waitForSelector('#saveSetting');
+        // await window.waitForSelector('#input_loginId');
+        // await window.waitForSelector('#input_password-input');
+        // await window.waitForSelector('#saveSetting');
 
         // Do this twice because sometimes the app likes to load the login screen, then go to Loading... again
         await asyncSleep(1000);
@@ -256,8 +256,8 @@ module.exports = {
         await window.waitForSelector('#input_password-input');
         await window.waitForSelector('#saveSetting');
 
-        await window.type('#input_loginId', 'user-1');
-        await window.type('#input_password-input', 'SampleUs@r-1');
+        await window.type('#input_loginId', 'sysadmin');
+        await window.type('#input_password-input', 'Sys@dmin-sample1');
         await window.click('#saveSetting');
     },
 
