@@ -11,6 +11,19 @@ on:
 jobs:
   e2e-linux:
     runs-on: ${{ matrix.os }}
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: mostest
+          POSTGRES_USER: mmuser
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
 
     strategy:
       matrix:
@@ -37,13 +50,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb
 
-      - name: Pull Mattermost Docker image and run the Mattermost server
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          docker pull mattermost/mattermost-enterprise-edition
-          docker run -d -p 8065:8065 mattermost/mattermost-enterprise-edition
+      - name: Checkout mattermost
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        with:
+          repository: mattermost/mattermost
+          path: mattermost
 
-          # Add a check to wait for Mattermost server to be responsive
+      - name: Run mattermsot server
+        run: |
+          cd mattermost/server/
+          make run-server
+        env:
+          MM_LOGSETTINGS_ENABLECONSOLE: false
+          MM_LOGSETTINGS_FILELEVEL: debug
+          MM_SQLSETTINGS_DATASOURCE: postgres://mmuser:mostest@localhost/postgres?sslmode=disable&connect_timeout=10&binary_parameters=yes
+          MM_TEAMSETTINGS_ENABLEOPENSERVER: true            
+
+      - name: Wait for Mattermost server to be up and running
+        run: |
           max_attempts=30
           for i in $(seq $max_attempts); do
             if curl -s http://localhost:8065/api/v4/system/ping | grep -q "Pong"; then
@@ -51,16 +75,14 @@ jobs:
               break
             else
               echo "Waiting for Mattermost server to be responsive... Attempt $i of $max_attempts"
-              sleep 30
+              sleep 10
             fi
           done
-
-          # If the server is still not responsive, consider it as a failure
           if ! curl -s http://localhost:8065/api/v4/system/ping | grep -q "Pong"; then
-            echo "Mattermost server did not start correctly."
+            echo "Mattermost server did not start correctly after $max_attempts attempts."
             exit 1
           fi
-          
+
       - name: Install dependencies
         run: npm ci
 
