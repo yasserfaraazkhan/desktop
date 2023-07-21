@@ -58,7 +58,7 @@ jobs:
 
       - name: Run mattermsot server
         run: |
-          cd e2e-tests
+          cd mattermost/e2e-tests
           echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
           make start-server && make prepare-server
 
