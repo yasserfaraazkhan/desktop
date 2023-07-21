@@ -60,14 +60,6 @@ jobs:
         run: |
           cd mattermost/server/
           make run-server
-        env:
-          MM_LOGSETTINGS_ENABLECONSOLE: false
-          MM_LOGSETTINGS_FILELEVEL: debug
-          MM_SQLSETTINGS_DATASOURCE: postgres://mmuser:mostest@localhost/postgres?sslmode=disable&connect_timeout=10&binary_parameters=yes
-          MM_TEAMSETTINGS_ENABLEOPENSERVER: true            
-
-      - name: Wait for Mattermost server to be up and running
-        run: |
           max_attempts=10
           for i in $(seq $max_attempts); do
             if curl -iL http://localhost:8065/api/v4/system/ping | grep -q "status"; then
@@ -82,6 +74,11 @@ jobs:
             echo "Mattermost server did not start correctly after $max_attempts attempts."
             exit 1
           fi
+        env:
+          MM_LOGSETTINGS_ENABLECONSOLE: false
+          MM_LOGSETTINGS_FILELEVEL: debug
+          MM_SQLSETTINGS_DATASOURCE: postgres://mmuser:mostest@localhost/postgres?sslmode=disable&connect_timeout=10&binary_parameters=yes
+          MM_TEAMSETTINGS_ENABLEOPENSERVER: true            
 
       - name: Install dependencies
         run: npm ci
