@@ -130,9 +130,21 @@ jobs:
 
       - name: Install Docker and Docker Compose
         run: |
-          choco install docker-cli
-          choco install docker-compose
+          # choco install docker-cli
+          # choco install docker-compose
           choco install make
+
+          Invoke-WebRequest -Uri https://desktop.docker.com/win/stable/Docker%20Desktop%20Installer.exe -OutFile DockerDesktopInstaller.exe
+          Start-Process -Wait -FilePath DockerDesktopInstaller.exe -ArgumentList '--quiet'
+          
+          # Wait for Docker to start (adjust the sleep duration if needed)
+          Start-Sleep -Seconds 60
+
+          # Install Docker Compose
+          Invoke-WebRequest -Uri https://github.com/docker/compose/releases/latest/download/docker-compose-Windows-x86_64.exe -OutFile 'C:\Program Files\Docker\docker-compose.exe'
+          
+          # Add Docker Compose to the system path
+          $env:Path += ';C:\Program Files\Docker'
 
       - name: Checkout mattermost
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
