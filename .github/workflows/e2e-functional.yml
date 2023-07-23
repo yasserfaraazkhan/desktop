@@ -8,6 +8,16 @@ on:
     branches:
       - master
 
+env:
+  JIRA_PROJECT_KEY: 'MM'
+  ZEPHYR_ENABLE: 'true'
+  ZEPHYR_ENVIRONMENT_NAME: 'Desktop app'
+  ZEPHYR_FOLDER_ID: ${{ secrets.ZEPHYR_FOLDER_ID }}
+  JIRA_PROJECT_KEY: "MM"
+  ZEPHYR_ENABLE: "true"
+  ZEPHYR_ENVIRONMENT_NAME: "Desktop app"
+  DNS_RECORD_1: "https://localhost:8065"
+
 jobs:
   e2e-linux:
     runs-on: ${{ matrix.os }}
@@ -48,12 +58,39 @@ jobs:
           echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
           make start-server && make prepare-server
 
+      - name: Setup environment variables
+        run: |
+          case ${{ github.event_name }} in
+            "pull_request")
+              # ... Your pull request-specific setup ...
+              export PULL_REQUEST="https://github.com/mattermost/desktop/pull/${{ github.event.pull_request.number }}"
+              export BUILD_SUFFIX="desktop-pr"
+              ;;
+
+            "push")
+              # ... Your push-specific setup ...
+              export BUILD_SUFFIX="desktop-release"
+              ;;
+
+            # ... Add other event types as needed ...
+          esac
+
+      - name: Print environment variables
+        run: |
+          echo "PULL_REQUEST=$PULL_REQUEST"
+          echo "BUILD_SUFFIX=$BUILD_SUFFIX"
+          echo "BUILD_ID=${{ github.run_id }}-$BUILD_SUFFIX-${{ runner.os }}"
+          echo "MM_TEST_SERVER_URL=$DNS_RECORD_1"
+          echo "ZEPHYR_ENABLE=$ZEPHYR_ENABLE"
+          echo "ZEPHYR_ENVIRONMENT_NAME=$ZEPHYR_ENVIRONMENT_NAME"
+          echo "ZEPHYR_FOLDER_ID=$ZEPHYR_FOLDER_ID"
+
       - name: Run Playwright tests (Ubuntu OS)
         run: |
           export DISPLAY=:99
           Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
           npm run test:e2e || true
-          # npm run test:e2e:send-report
+          npm run test:e2e:send-report
 
       - name: Upload Mochawesome Report
         uses: actions/upload-artifact@v3.1.2
