@@ -13,9 +13,6 @@ env:
   ZEPHYR_ENABLE: 'true'
   ZEPHYR_ENVIRONMENT_NAME: 'Desktop app'
   ZEPHYR_FOLDER_ID: ${{ secrets.ZEPHYR_FOLDER_ID }}
-  JIRA_PROJECT_KEY: "MM"
-  ZEPHYR_ENABLE: "true"
-  ZEPHYR_ENVIRONMENT_NAME: "Desktop app"
   DNS_RECORD_1: "https://localhost:8065"
 
 jobs:
