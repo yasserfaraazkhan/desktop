@@ -69,7 +69,6 @@ function getZEPHYRTestCases(report) {
 }
 
 function saveToEndpoint(url, data) {
-    console.log('in saveToEndpoint');
     return axios({
         method: 'POST',
         url,
@@ -104,10 +103,6 @@ async function createTestCycle(startDate, endDate) {
     };
 
     const response = await saveToEndpoint('https://api.zephyrscale.smartbear.com/v2/testcycles', testCycle);
-
-    console.log('GOT RESPONSE *******');
-    console.log(response);
-    console.log('*******');
     return response.data;
 }
 
