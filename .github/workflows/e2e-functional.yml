@@ -14,6 +14,9 @@ env:
   ZEPHYR_ENVIRONMENT_NAME: 'Desktop app'
   ZEPHYR_FOLDER_ID: ${{ secrets.ZEPHYR_FOLDER_ID }}
   DNS_RECORD_1: "https://localhost:8065"
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 jobs:
   e2e-linux:
@@ -60,8 +63,8 @@ jobs:
           case ${{ github.event_name }} in
             "pull_request")
               # ... Your pull request-specific setup ...
-              export PULL_REQUEST="https://github.com/mattermost/desktop/pull/${{ github.event.pull_request.number }}"
-              export BUILD_SUFFIX="desktop-pr"
+              echo "PULL_REQUEST=https://github.com/mattermost/desktop/pull/${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+              echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
               ;;
 
             "push")
@@ -74,13 +77,15 @@ jobs:
 
       - name: Print environment variables
         run: |
-          echo "PULL_REQUEST=$PULL_REQUEST"
-          echo "BUILD_SUFFIX=$BUILD_SUFFIX"
+          echo "PULL_REQUEST=${{ env.PULL_REQUEST }}"
+          echo "BUILD_SUFFIX=${{ env.BUILD_SUFFIX }}"
           echo "BUILD_ID=${{ github.run_id }}-$BUILD_SUFFIX-${{ runner.os }}"
           echo "MM_TEST_SERVER_URL=$DNS_RECORD_1"
           echo "ZEPHYR_ENABLE=$ZEPHYR_ENABLE"
           echo "ZEPHYR_ENVIRONMENT_NAME=$ZEPHYR_ENVIRONMENT_NAME"
           echo "ZEPHYR_FOLDER_ID=$ZEPHYR_FOLDER_ID"
+          echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
+          echo "SHORT_COMMIT_HASH=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Run Playwright tests (Ubuntu OS)
         run: |
