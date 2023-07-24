@@ -31,63 +31,70 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3.5.3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3.7.0
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+      # - name: Set up Node.js
+      #   uses: actions/setup-node@v3.7.0
+      #   with:
+      #     node-version: ${{ matrix.node-version }}
+      #     cache: 'npm'
 
-      - name: Install packages (Ubuntu OS)
-        run: |
-          sudo apt-get install libxtst-dev libpng++-dev
-          sudo apt-get update
-          sudo apt-get install -y xvfb
+      # - name: Install packages (Ubuntu OS)
+      #   run: |
+      #     sudo apt-get install libxtst-dev libpng++-dev
+      #     sudo apt-get update
+      #     sudo apt-get install -y xvfb
 
-      - name: Install dependencies
-        run: npm ci
+      # - name: Install dependencies
+      #   run: npm ci
 
-      - name: Checkout mattermost
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-        with:
-          repository: mattermost/mattermost
-          path: mattermost
+      # - name: Checkout mattermost
+      #   uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      #   with:
+      #     repository: mattermost/mattermost
+      #     path: mattermost
 
-      - name: Run mattermsot server
-        run: |
-          cd mattermost/e2e-tests
-          echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
-          make start-server && make prepare-server
+      # - name: Run mattermsot server
+      #   run: |
+      #     cd mattermost/e2e-tests
+      #     echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
+      #     make start-server && make prepare-server
 
-      - name: Print environment variables
+
+      - name: Set Environment Variables
         run: |
           echo "PULL_REQUEST=https://github.com/mattermost/desktop/pull/${{ github.event.pull_request.number }}" >> $GITHUB_ENV
           echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
-          echo "BUILD_ID=${{ github.run_id }}-${{ env.BUILD_SUFFIX}}-${{ runner.os }}"
+          echo "BUILD_ID=${{ github.run_id }}-${{ env.BUILD_SUFFIX}}-${{ runner.os }}" >> $GITHUB_ENV
           echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
-
-          echo "MM_TEST_SERVER_URL=${{ env.DNS_RECORD_1 }}"
-          echo "ZEPHYR_ENABLE=${{ env.ZEPHYR_ENABLE }}"
-          echo "ZEPHYR_ENVIRONMENT_NAME=${{ env.ZEPHYR_ENVIRONMENT_NAME }}"
-          echo "ZEPHYR_FOLDER_ID=${{ env.ZEPHYR_FOLDER_ID }}"
+          echo "MM_TEST_SERVER_URL=${{ secrets.DNS_RECORD_1 }}" >> $GITHUB_ENV
+          echo "ZEPHYR_ENABLE=${{ secrets.ZEPHYR_ENABLE }}" >> $GITHUB_ENV
+          echo "ZEPHYR_ENVIRONMENT_NAME=${{ secrets.ZEPHYR_ENVIRONMENT_NAME }}" >> $GITHUB_ENV
+          echo "ZEPHYR_FOLDER_ID=${{ secrets.ZEPHYR_FOLDER_ID }}" >> $GITHUB_ENV
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          echo "BRANCH=${{ env.BRANCH }}"
-          echo "BUILD_TAG=${{ env.BUILD_TAG }}"
-          echo "PULL_REQUEST=${{ env.PULL_REQUEST }}"
-          echo "BUILD_SUFFIX=${{ env.BUILD_SUFFIX }}"
 
-
-      - name: Run Playwright tests (Ubuntu OS)
+      - name: Print Environment Variables
         run: |
-          export DISPLAY=:99
-          Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
-          npm run test:e2e || true
-          npm run test:e2e:send-report
+          echo "BUILD_ID: ${{ env.BUILD_ID }}"
+          echo "BRANCH: ${{ env.BRANCH }}"
+          echo "MM_TEST_SERVER_URL: ${{ env.MM_TEST_SERVER_URL }}"
+          echo "ZEPHYR_ENABLE: ${{ env.ZEPHYR_ENABLE }}"
+          echo "ZEPHYR_ENVIRONMENT_NAME: ${{ env.ZEPHYR_ENVIRONMENT_NAME }}"
+          echo "ZEPHYR_FOLDER_ID: ${{ env.ZEPHYR_FOLDER_ID }}"
+          echo "BUILD_TAG: ${{ env.BUILD_TAG }}"
+          echo "PULL_REQUEST: ${{ env.PULL_REQUEST }}"
+          echo "BUILD_SUFFIX: ${{ env.BUILD_SUFFIX }}"
 
-      - name: Upload Mochawesome Report
-        uses: actions/upload-artifact@v3.1.2
-        with:
-          name: mochawesome-report
-          path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
+      # - name: Run Playwright tests (Ubuntu OS)
+      #   run: |
+      #     export DISPLAY=:99
+      #     Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
+      #     npm run test:e2e || true
+      #     npm run test:e2e:send-report
+
+      # - name: Upload Mochawesome Report
+      #   uses: actions/upload-artifact@v3.1.2
+      #   with:
+      #     name: mochawesome-report
+      #     path: /home/runner/work/desktop/desktop/mochawesome-report/mochawesome.html
 
   # e2e-macos:
   #     runs-on: ${{ matrix.os }}
