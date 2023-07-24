@@ -69,6 +69,13 @@ function getZEPHYRTestCases(report) {
 }
 
 function saveToEndpoint(url, data) {
+    console.log('*********************');
+    console.log(url);
+    console.log('*********************');
+    console.log(data);
+    console.log('*********************');
+
+
     return axios({
         method: 'POST',
         url,
@@ -78,6 +85,9 @@ function saveToEndpoint(url, data) {
         },
         data,
     }).catch((error) => {
+        console.log('*********************');
+        console.log('Something went wrong:', error);
+        console.log('Something went wrong:', error.response);
         console.log('Something went wrong:', error.response.data.message);
         return error.response.data;
     });
