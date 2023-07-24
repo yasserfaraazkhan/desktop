@@ -67,8 +67,8 @@ jobs:
 
           echo "MM_TEST_SERVER_URL=${{ env.DNS_RECORD_1 }}"
           echo "ZEPHYR_ENABLE=${{ env.ZEPHYR_ENABLE }}"
-          echo "ZEPHYR_ENVIRONMENT_NAME=${{ ZEPHYR_ENVIRONMENT_NAME }}"
-          echo "ZEPHYR_FOLDER_ID=${{ ZEPHYR_FOLDER_ID }}"
+          echo "ZEPHYR_ENVIRONMENT_NAME=${{ env.ZEPHYR_ENVIRONMENT_NAME }}"
+          echo "ZEPHYR_FOLDER_ID=${{ env.ZEPHYR_FOLDER_ID }}"
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "BRANCH=${{ env.BRANCH }}"
           echo "BUILD_TAG=${{ env.BUILD_TAG }}"
