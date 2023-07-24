@@ -69,13 +69,7 @@ function getZEPHYRTestCases(report) {
 }
 
 function saveToEndpoint(url, data) {
-    console.log('*********************');
-    console.log(url);
-    console.log('*********************');
-    console.log(data);
-    console.log('*********************');
-
-
+    console.log('in saveToEndpoint');
     return axios({
         method: 'POST',
         url,
@@ -85,9 +79,6 @@ function saveToEndpoint(url, data) {
         },
         data,
     }).catch((error) => {
-        console.log('*********************');
-        console.log('Something went wrong:', error);
-        console.log('Something went wrong:', error.response);
         console.log('Something went wrong:', error.response.data.message);
         return error.response.data;
     });
@@ -113,6 +104,10 @@ async function createTestCycle(startDate, endDate) {
     };
 
     const response = await saveToEndpoint('https://api.zephyrscale.smartbear.com/v2/testcycles', testCycle);
+
+    console.log('GOT RESPONSE *******');
+    console.log(response);
+    console.log('*******');
     return response.data;
 }
 

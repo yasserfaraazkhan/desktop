@@ -71,6 +71,7 @@ jobs:
           echo "ZEPHYR_ENVIRONMENT_NAME=${{ env.ZEPHYR_ENVIRONMENT_NAME }}" >> $GITHUB_ENV
           echo "ZEPHYR_FOLDER_ID=${{ secrets.ZEPHYR_FOLDER_ID }}" >> $GITHUB_ENV
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo  ZEPHYR_API_KEY: ${{ secrets.ZEPHYR_API_KEY }}
 
       - name: Print Environment Variables
         run: |
