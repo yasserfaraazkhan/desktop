@@ -43,6 +43,13 @@ async function saveArtifacts() {
     }
 
     const s3Folder = `${BUILD_ID}-${BRANCH}-${BUILD_TAG}`.replace(/\./g, '-');
+
+    console.log('********************');
+    console.log(BUILD_ID);
+    console.log(BRANCH);
+    console.log(BUILD_TAG);
+    console.log(s3Folder);
+    console.log('********************');
     const uploadPath = path.resolve(__dirname, `../../${MOCHAWESOME_REPORT_DIR}`);
     const filesToUpload = await getFiles(uploadPath);
 
