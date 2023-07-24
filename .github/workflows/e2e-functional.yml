@@ -65,9 +65,9 @@ jobs:
           echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
           echo "BUILD_ID=${{ github.run_id }}-${{ env.BUILD_SUFFIX}}-${{ runner.os }}" >> $GITHUB_ENV
           echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
-          echo "MM_TEST_SERVER_URL=${{ secrets.DNS_RECORD_1 }}" >> $GITHUB_ENV
-          echo "ZEPHYR_ENABLE=${{ secrets.ZEPHYR_ENABLE }}" >> $GITHUB_ENV
-          echo "ZEPHYR_ENVIRONMENT_NAME=${{ secrets.ZEPHYR_ENVIRONMENT_NAME }}" >> $GITHUB_ENV
+          echo "MM_TEST_SERVER_URL=${{ env.DNS_RECORD_1 }}" >> $GITHUB_ENV
+          echo "ZEPHYR_ENABLE=${{ env.ZEPHYR_ENABLE }}" >> $GITHUB_ENV
+          echo "ZEPHYR_ENVIRONMENT_NAME=${{ env.ZEPHYR_ENVIRONMENT_NAME }}" >> $GITHUB_ENV
           echo "ZEPHYR_FOLDER_ID=${{ secrets.ZEPHYR_FOLDER_ID }}" >> $GITHUB_ENV
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
