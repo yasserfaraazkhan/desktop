@@ -9,18 +9,22 @@ on:
       - master
 
 env:
-  JIRA_PROJECT_KEY: 'MM'
-  ZEPHYR_ENABLE: 'true'
-  ZEPHYR_ENVIRONMENT_NAME: 'Desktop app'
-  ZEPHYR_FOLDER_ID: ${{ secrets.ZEPHYR_FOLDER_ID }}
-  DNS_RECORD_1: "https://localhost:8065"
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  ZEPHYR_API_KEY: ${{ secrets.ZEPHYR_API_KEY }}
-  WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+  BRANCH_NAME: ${{ github.ref }}
+  BUILD_SUFFIX: 'desktop-pr'
+  DNS_RECORD_1: "https://localhost:8065"
+  JIRA_PROJECT_KEY: 'MM'
+  PULL_REQUEST_BASE_URL: "https://github.com/mattermost/desktop/pull/"
+  PULL_REQUEST: ${{ github.event_name == 'pull_request' && ${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }} || '' }}
   TEST_CYCLE_LINK_PREFIX: ${{ secrets.TEST_CYCLE_LINK_PREFIX }}
   TYPE: ${{ github.event_name == 'pull_request' && 'PR' || '' }}
+  WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+  ZEPHYR_API_KEY: ${{ secrets.ZEPHYR_API_KEY }}
+  ZEPHYR_ENABLE: 'true'
+  ZEPHYR_ENVIRONMENT_NAME: 'Desktop app'
+  ZEPHYR_FOLDER_ID: ${{ secrets.ZEPHYR_FOLDER_ID }}
 
 jobs:
   e2e-linux:
@@ -61,19 +65,12 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          echo "PULL_REQUEST=https://github.com/mattermost/desktop/pull/${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
           echo "BUILD_ID=${{ github.run_id }}-${{ env.BUILD_SUFFIX}}-${{ runner.os }}" >> $GITHUB_ENV
-          echo "BRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
-          echo "MM_TEST_SERVER_URL=${{ env.DNS_RECORD_1 }}" >> $GITHUB_ENV
-          echo "ZEPHYR_ENABLE=${{ env.ZEPHYR_ENABLE }}" >> $GITHUB_ENV
-          echo "ZEPHYR_ENVIRONMENT_NAME=${{ env.ZEPHYR_ENVIRONMENT_NAME }}" >> $GITHUB_ENV
-          echo "ZEPHYR_FOLDER_ID=${{ secrets.ZEPHYR_FOLDER_ID }}" >> $GITHUB_ENV
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          echo  ZEPHYR_API_KEY: ${{ secrets.ZEPHYR_API_KEY }}
 
       - name: Print Environment Variables
         run: |
+          echo "PULL_REQUEST: ${{ env.PULL_REQUEST }}"
           echo "BUILD_ID: ${{ env.BUILD_ID }}"
           echo "BRANCH: ${{ env.BRANCH }}"
           echo "MM_TEST_SERVER_URL: ${{ env.MM_TEST_SERVER_URL }}"
@@ -84,6 +81,9 @@ jobs:
           echo "PULL_REQUEST: ${{ env.PULL_REQUEST }}"
           echo "BUILD_SUFFIX: ${{ env.BUILD_SUFFIX }}"
           echo "TYPE: ${{ env.TYPE }}"
+          echo "JIRA_PROJECT_KEY: ${{ env.JIRA_PROJECT_KEY }}"
+          echo "DNS_RECORD_1: ${{ env.DNS_RECORD_1 }}"
+          echo "AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}"
           echo "WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}"
           echo "TEST_CYCLE_LINK_PREFIX: ${{ secrets.TEST_CYCLE_LINK_PREFIX }}"
 
