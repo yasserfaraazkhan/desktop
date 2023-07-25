@@ -47,11 +47,11 @@ jobs:
       #     sudo apt-get update
       #     sudo apt-get install -y xvfb
 
-      # - name: Checkout mattermost
-      #   uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-      #   with:
-      #     repository: mattermost/mattermost
-      #     path: mattermost
+      - name: Checkout mattermost
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        with:
+          repository: mattermost/mattermost
+          path: mattermost
 
       # - name: Run mattermsot server
       #   run: |
@@ -102,7 +102,6 @@ jobs:
           echo "BUILD_SUFFIX: ${{ env.BUILD_SUFFIX }}"
           echo "TYPE: ${{ env.TYPE }}"
           echo "JIRA_PROJECT_KEY: ${{ env.JIRA_PROJECT_KEY }}"
-          echo "DNS_RECORD_1: ${{ env.DNS_RECORD_1 }}"
           echo "AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}"
           echo "WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}"
           echo "TEST_CYCLE_LINK_PREFIX: ${{ secrets.TEST_CYCLE_LINK_PREFIX }}"
