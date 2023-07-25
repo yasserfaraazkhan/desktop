@@ -61,9 +61,32 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          echo "BUILD_ID=${{ github.run_id }}-${{ env.BUILD_SUFFIX}}-${{ runner.os }}" >> $GITHUB_ENV
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+            BUILD_SUFFIX="desktop-pr"
+          elif [ "${{ github.event_name }}" == "release" ]; then
+            BRANCH_NAME="${{ github.ref }}"
+            BUILD_SUFFIX="desktop-release"
+            ZEPHYR_ENABLE="true"
+          elif [ "${{ github.event_name }}" == "schedule" ]; then
+            BRANCH_NAME="${{ github.ref }}"
+            BUILD_SUFFIX="desktop-nightly"
+          else
+            BRANCH_NAME="${{ github.ref }}"
+            BUILD_SUFFIX="desktop-other"
+          fi
+
+          echo "BRANCH=${BRANCH_NAME#refs/heads/}" >> $GITHUB_ENV
+          echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "BUILD_SUFFIX=${BUILD_SUFFIX}" >> $GITHUB_ENV
+          if [ -n "${ZEPHYR_ENABLE}" ]; then
+            echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
+          fi
+
+          echo ${BRANCH}
+          echo ${BRANCH_NAME}
 
       - name: Print Environment Variables
         run: |
