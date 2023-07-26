@@ -23,17 +23,17 @@ env:
   ZEPHYR_FOLDER_ID: ${{ secrets.ZEPHYR_FOLDER_ID }}
 
 jobs:
-  e2e-linux:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest] #,  ubuntu-latest, windows-latest]
-        node-version: [18.x]
+  # e2e-linux:
+  #   runs-on: ${{ matrix.os }}
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-latest] #,  ubuntu-latest, windows-latest]
+  #       node-version: [18.x]
 
-    steps:
+  #   steps:
 
-      - name: Check out code
-        uses: actions/checkout@v3.5.3
+  #     - name: Check out code
+  #       uses: actions/checkout@v3.5.3
 
       # - name: Set up Node.js
       #   uses: actions/setup-node@v3.7.0
@@ -47,11 +47,11 @@ jobs:
       #     sudo apt-get update
       #     sudo apt-get install -y xvfb
 
-      - name: Checkout mattermost
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-        with:
-          repository: mattermost/mattermost
-          path: mattermost
+      # - name: Checkout mattermost
+      #   uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      #   with:
+      #     repository: mattermost/mattermost
+      #     path: mattermost
 
       # - name: Run mattermsot server
       #   run: |
@@ -59,52 +59,52 @@ jobs:
       #     echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
       #     make start-server && make prepare-server
 
-      - name: Set Environment Variables
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
-            echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
-          elif [ "${{ github.event_name }}" == "release" ]; then
-            echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
-            echo "BUILD_SUFFIX=desktop-release" >> $GITHUB_ENV
-            echo "ZEPHYR_ENABLE=true" >> $GITHUB_ENV
-          elif [ "${{ github.event_name }}" == "schedule" ]; then
-            echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
-            echo "BUILD_SUFFIX=desktop-nightly" >> $GITHUB_ENV
-          fi
+      # - name: Set Environment Variables
+      #   run: |
+      #     if [ "${{ github.event_name }}" == "pull_request" ]; then
+      #       echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+      #       echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
+      #     elif [ "${{ github.event_name }}" == "release" ]; then
+      #       echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
+      #       echo "BUILD_SUFFIX=desktop-release" >> $GITHUB_ENV
+      #       echo "ZEPHYR_ENABLE=true" >> $GITHUB_ENV
+      #     elif [ "${{ github.event_name }}" == "schedule" ]; then
+      #       echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
+      #       echo "BUILD_SUFFIX=desktop-nightly" >> $GITHUB_ENV
+      #     fi
 
-          echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
-          echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          if [ -n "${ZEPHYR_ENABLE}" ]; then
-            echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
-          fi
+      #     echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
+      #     echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      #     echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+      #     if [ -n "${ZEPHYR_ENABLE}" ]; then
+      #       echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
+      #     fi
 
-          echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
-          echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "BUILD_SUFFIX=${BUILD_SUFFIX}" >> $GITHUB_ENV
-          if [ -n "${ZEPHYR_ENABLE}" ]; then
-            echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
-          fi
+      #     echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
+      #     echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      #     echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+      #     echo "BUILD_SUFFIX=${BUILD_SUFFIX}" >> $GITHUB_ENV
+      #     if [ -n "${ZEPHYR_ENABLE}" ]; then
+      #       echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
+      #     fi
 
-      - name: Print Environment Variables
-        run: |
-          echo "PULL_REQUEST: ${{ env.PULL_REQUEST }}"
-          echo "BUILD_ID: ${{ env.BUILD_ID }}"
-          echo "BRANCH: ${{ env.BRANCH }}"
-          echo "MM_TEST_SERVER_URL: ${{ env.MM_TEST_SERVER_URL }}"
-          echo "ZEPHYR_ENABLE: ${{ env.ZEPHYR_ENABLE }}"
-          echo "ZEPHYR_ENVIRONMENT_NAME: ${{ env.ZEPHYR_ENVIRONMENT_NAME }}"
-          echo "ZEPHYR_FOLDER_ID: ${{ env.ZEPHYR_FOLDER_ID }}"
-          echo "BUILD_TAG: ${{ env.BUILD_TAG }}"
-          echo "PULL_REQUEST: ${{ env.PULL_REQUEST }}"
-          echo "BUILD_SUFFIX: ${{ env.BUILD_SUFFIX }}"
-          echo "TYPE: ${{ env.TYPE }}"
-          echo "JIRA_PROJECT_KEY: ${{ env.JIRA_PROJECT_KEY }}"
-          echo "AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}"
-          echo "WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}"
-          echo "TEST_CYCLE_LINK_PREFIX: ${{ secrets.TEST_CYCLE_LINK_PREFIX }}"
+      # - name: Print Environment Variables
+      #   run: |
+      #     echo "PULL_REQUEST: ${{ env.PULL_REQUEST }}"
+      #     echo "BUILD_ID: ${{ env.BUILD_ID }}"
+      #     echo "BRANCH: ${{ env.BRANCH }}"
+      #     echo "MM_TEST_SERVER_URL: ${{ env.MM_TEST_SERVER_URL }}"
+      #     echo "ZEPHYR_ENABLE: ${{ env.ZEPHYR_ENABLE }}"
+      #     echo "ZEPHYR_ENVIRONMENT_NAME: ${{ env.ZEPHYR_ENVIRONMENT_NAME }}"
+      #     echo "ZEPHYR_FOLDER_ID: ${{ env.ZEPHYR_FOLDER_ID }}"
+      #     echo "BUILD_TAG: ${{ env.BUILD_TAG }}"
+      #     echo "PULL_REQUEST: ${{ env.PULL_REQUEST }}"
+      #     echo "BUILD_SUFFIX: ${{ env.BUILD_SUFFIX }}"
+      #     echo "TYPE: ${{ env.TYPE }}"
+      #     echo "JIRA_PROJECT_KEY: ${{ env.JIRA_PROJECT_KEY }}"
+      #     echo "AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}"
+      #     echo "WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}"
+      #     echo "TEST_CYCLE_LINK_PREFIX: ${{ secrets.TEST_CYCLE_LINK_PREFIX }}"
 
       # - name: Install dependencies
       #   run: npm ci
@@ -116,49 +116,56 @@ jobs:
       #     npm run test:e2e || true
       #     npm run test:e2e:send-report
 
-  # e2e-macos:
-  #     runs-on: ${{ matrix.os }}
-  #     strategy:
-  #       matrix:
-  #         os: [macos-latest]
-  #         node-version: [18.x]
+  e2e-macos:
+      runs-on: ${{ matrix.os }}
+      strategy:
+        matrix:
+          os: [macos-12]
+          node-version: [18.x]
 
-  #     steps:
-  #       - name: Check out code
-  #         uses: actions/checkout@v3.5.3
+      steps:
+        - name: ci/checkout-repo
+          uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        - name: ci/setup-node
+          uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
+          with:
+            node-version-file: "package.json"
+            cache: "npm"
+            cache-dependency-path: package-lock.json
+        - name: ci/install-dependencies
+          env:
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          run: |
+            brew install yq
+            jq '.mac.target=["zip"]' electron-builder.json | jq '.mac.gatekeeperAssess=false' > /tmp/electron-builder.json && cp /tmp/electron-builder.json .
+            npm ci
 
-  #       - name: Set up Node.js
-  #         uses: actions/setup-node@v3.7.0
-  #         with:
-  #           node-version: ${{ matrix.node-version }}
-  #           cache: 'npm'
+        - name: Setup Docker on macOS
+          run: |
+            brew install docker docker-compose
+            colima start
+            mkdir -p ~/.docker/cli-plugins
+            ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 
-  #       - name: Setup Docker on macOS
-  #         run: |
-  #           brew install docker docker-compose
-  #           colima start
-  #           mkdir -p ~/.docker/cli-plugins
-  #           ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
+        - name: Checkout mattermost
+          uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+          with:
+            repository: mattermost/mattermost
+            path: mattermost
 
-  #       - name: Checkout mattermost
-  #         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #         with:
-  #           repository: mattermost/mattermost
-  #           path: mattermost
+        - name: Run mattermsot server
+          run: |
+            cd mattermost/e2e-tests
+            echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
+            make start-server && make prepare-server
 
-  #       - name: Run mattermsot server
-  #         run: |
-  #           cd mattermost/e2e-tests
-  #           echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
-  #           make start-server && make prepare-server
+        - name: Install dependencies
+          run: npm ci
 
-  #       - name: Install dependencies
-  #         run: npm ci
-
-  #       - name: Run Playwright tests (macOS)
-  #         run: |
-  #           npm run test:e2e || true
-  #           # npm run test:e2e:send-report
+        - name: Run Playwright tests (macOS)
+          run: |
+            npm run test:e2e || true
+            # npm run test:e2e:send-report
 
   # e2e-windows:
   #   runs-on: ${{ matrix.os }}
