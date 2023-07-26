@@ -132,6 +132,12 @@ jobs:
             node-version-file: "package.json"
             cache: "npm"
             cache-dependency-path: package-lock.json
+
+        - name: Setup go
+          uses: actions/setup-go@v2
+          with:
+            go-version: '1.20'
+
         - name: ci/install-dependencies
           env:
             PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
@@ -155,9 +161,9 @@ jobs:
 
         - name: Run mattermsot server
           run: |
-            cd mattermost/e2e-tests
-            echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
-            make start-server && make prepare-server
+            cd mattermost/server
+            make test-data || true
+            make run-server
 
         - name: Install dependencies
           run: npm ci
