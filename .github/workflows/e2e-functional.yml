@@ -65,6 +65,7 @@ jobs:
         with:
           repository: mattermost/mattermost
           path: mattermost
+          ref: fix-e2e-macos-support
 
       - name: Run mattermsot server & Playwright tests (Ubuntu OS)
         run: |
@@ -100,6 +101,7 @@ jobs:
           brew install yq
           jq '.mac.target=["zip"]' electron-builder.json | jq '.mac.gatekeeperAssess=false' > /tmp/electron-builder.json && cp /tmp/electron-builder.json .
           npm ci
+
       - name: Setup Docker on macOS
         run: |
           brew install docker docker-compose
@@ -112,6 +114,7 @@ jobs:
         with:
           repository: mattermost/mattermost
           path: mattermost
+          ref: fix-e2e-macos-support
 
       - name: Run mattermsot server 
         run: |
@@ -119,4 +122,4 @@ jobs:
           echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
           make start-server && make prepare-server
           npm run test:e2e || true
-          # npm run test:e2e:send-report
+          npm run test:e2e:send-report
