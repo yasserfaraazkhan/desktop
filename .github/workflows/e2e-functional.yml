@@ -76,7 +76,6 @@ jobs:
           cd mattermost/e2e-tests
           echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
           make start-server && make prepare-server
-          cd ../..
           export DISPLAY=:99
           Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
           npm run test:e2e || true
@@ -129,7 +128,7 @@ jobs:
 
         - name: Playwright tests (macOS)  
           run : |
-            bash ./scripts/wait-for-server.sh
+            bash ./.github/workflows/scripts/wait-for-server.sh
             npm run test:e2e || true
             # npm run test:e2e:send-report
 
