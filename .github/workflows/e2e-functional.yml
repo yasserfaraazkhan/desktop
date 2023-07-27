@@ -164,6 +164,15 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
+      - name: Install GO
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.20"
+
+      - name: Set up WSL
+        run: |
+          wsl.exe echo "WSL is set up."
+            
       - name: ci/install-node-gyp
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
