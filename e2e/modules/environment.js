@@ -246,9 +246,9 @@ module.exports = {
     },
 
     async loginToMattermost(window) {
-        // await window.waitForSelector('#input_loginId');
-        // await window.waitForSelector('#input_password-input');
-        // await window.waitForSelector('#saveSetting');
+        await window.waitForSelector('#input_loginId');
+        await window.waitForSelector('#input_password-input');
+        await window.waitForSelector('#saveSetting');
 
         // Do this twice because sometimes the app likes to load the login screen, then go to Loading... again
         await asyncSleep(1000);
