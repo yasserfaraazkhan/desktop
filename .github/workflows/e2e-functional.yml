@@ -177,21 +177,21 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
-            echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
-          elif [ "${{ github.event_name }}" == "release" ]; then
-            echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
-            echo "BUILD_SUFFIX=desktop-release" >> $GITHUB_ENV
-            echo "ZEPHYR_ENABLE=true" >> $GITHUB_ENV
-          elif [ "${{ github.event_name }}" == "schedule" ]; then
-            echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
-            echo "BUILD_SUFFIX=desktop-nightly" >> $GITHUB_ENV
-          fi
-          echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
-          echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-
+          if "%{github.event_name}%" == "pull_request" (
+            echo BRANCH=%{github.event.pull_request.head.ref}% >> $env:GITHUB_ENV
+            echo BUILD_SUFFIX=desktop-pr >> $env:GITHUB_ENV
+          ) elseif "%{github.event_name}%" == "release" (
+            echo BRANCH=%{github.ref}% >> $env:GITHUB_ENV
+            echo BUILD_SUFFIX=desktop-release >> $env:GITHUB_ENV
+            echo ZEPHYR_ENABLE=true >> $env:GITHUB_ENV
+          ) elseif "%{github.event_name}%" == "schedule" (
+            echo BRANCH=%{github.ref}% >> $env:GITHUB_ENV
+            echo BUILD_SUFFIX=desktop-nightly >> $env:GITHUB_ENV
+          )
+          echo BUILD_ID=%{github.run_id}%-desktop-%{runner.os}% >> $env:GITHUB_ENV
+          echo BUILD_TAG=%GITHUB_SHA:~0,7% >> $env:GITHUB_ENV
+          echo PULL_REQUEST=%PULL_REQUEST_BASE_URL%%{github.event.pull_request.number}% >> $env:GITHUB_ENV
+        
       - name: Checkout mattermost
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
         with:
@@ -203,5 +203,6 @@ jobs:
         run: |
           cd mattermost/e2e-tests
           echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
+          make start-server && make prepare-server
           npm run test:e2e || true
           npm run test:e2e:send-report
