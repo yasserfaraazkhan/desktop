@@ -25,7 +25,6 @@ jobs:
   e2e-linux:
     runs-on: ubuntu-latest
     steps:
-
       - name: ci/checkout-repo
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
       - name: ci/setup-node
@@ -37,7 +36,7 @@ jobs:
 
       - name: ci/install-dependencies
         env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 0
         run: |
           wget -qO - https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_22.04/Release.key | sudo apt-key add -
           wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.20.1/yq_linux_amd64 && chmod a+x /usr/local/bin/yq
@@ -57,7 +56,6 @@ jobs:
             echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
             echo "BUILD_SUFFIX=desktop-nightly" >> $GITHUB_ENV
           fi
-
           echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
@@ -67,22 +65,12 @@ jobs:
         with:
           repository: mattermost/mattermost
           path: mattermost
-  
-      - name: Run Mattermsot server
+
+      - name: Run mattermsot server & Playwright tests (Ubuntu OS)
         run: |
           cd mattermost/e2e-tests
           echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
           make start-server && make prepare-server
-          echo "**************"
-          curl -L -s -o /dev/null -w "%{http_code}" http://localhost:8065
-          echo "**************"
-
-      - name: Run Playwright tests (Ubuntu OS)
-        run: |
-          echo "**************"
-          curl -L -s -o /dev/null -w "%{http_code}" http://localhost:8065
-          echo "**************"
-
           export DISPLAY=:99
           Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
           npm run test:e2e || true
@@ -90,7 +78,6 @@ jobs:
 
   e2e-macos:
     runs-on: macos-12
-
     steps:
       - name: ci/checkout-repo
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
@@ -108,12 +95,11 @@ jobs:
 
       - name: ci/install-dependencies
         env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 0
         run: |
           brew install yq
           jq '.mac.target=["zip"]' electron-builder.json | jq '.mac.gatekeeperAssess=false' > /tmp/electron-builder.json && cp /tmp/electron-builder.json .
           npm ci
-
       - name: Setup Docker on macOS
         run: |
           brew install docker docker-compose
@@ -127,62 +113,10 @@ jobs:
           repository: mattermost/mattermost
           path: mattermost
 
-      - name: Run Mattermsot server
+      - name: Run mattermsot server 
         run: |
-          cd mattermost/server
-          make inject-test-data || true
-          make run-server
-
-          sleep 30
-          echo "**************"
-          curl -L -s -o /dev/null -w "%{http_code}" http://localhost:8065
-          echo "**************"
-
+          cd mattermost/e2e-tests
+          echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
+          make start-server && make prepare-server
           npm run test:e2e || true
-          npm run test:e2e:send-report
-
-  # e2e-windows:
-  #   runs-on: windows-2022
-  #   steps:
-  #     - name: ci/checkout-repo
-  #       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #     - name: ci/setup-node
-  #       uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
-  #       with:
-  #         node-version-file: "package.json"
-  #         cache: "npm"
-  #         cache-dependency-path: package-lock.json
-  #     - name: ci/cache-node-modules
-  #       id: cache-node-modules
-  #       uses: actions/cache@627f0f41f6904a5b1efbaed9f96d9eb58e92e920 # v3.2.4
-  #       with:
-  #         path: node_modules
-  #         key: ${{ runner.os }}-build-node-modules-${{ hashFiles('**/package-lock.json') }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-build-node-modules
-  #           ${{ runner.os }}-build-
-  #           ${{ runner.os }}-
-  #     - name: ci/install-dependencies
-  #       if: steps.cache-node-modules.outputs.cache-hit != 'true'
-  #       env:
-  #         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 0
-  #       run: |
-  #         choco install yq --version 4.15.1 -y
-  #         npm i -g node-gyp
-  #         node-gyp install
-  #         node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers"
-  #         npm ci --openssl_fips=''
-
-  #     - name: Checkout mattermost
-  #       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #       with:
-  #         repository: mattermost/mattermost
-  #         path: mattermost
-
-  #     - name: Run mattermsot server 
-  #       run: |
-  #         cd mattermost/e2e-tests
-  #         echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
-  #         make start-server && make prepare-server
-  #         npm run test:e2e || true
-  #         npm run test:e2e:send-report
+          # npm run test:e2e:send-report
