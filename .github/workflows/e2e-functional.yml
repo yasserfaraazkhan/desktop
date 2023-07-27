@@ -24,31 +24,25 @@ env:
 
 jobs:
   e2e-linux:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest] #,  ubuntu-latest, windows-latest]
-        node-version: [18.x]
-
+    runs-on: ubuntu-latest-4-cores
     steps:
 
-      - name: Check out code
-        uses: actions/checkout@v3.5.3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3.7.0
+      - name: ci/checkout-repo
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      - name: ci/setup-node
+        uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-
-      - name: Install packages (Ubuntu OS)
+          node-version-file: "package.json"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+      - name: ci/install-dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
         run: |
-          sudo apt-get install libxtst-dev libpng++-dev
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-
-      - name: Install Desktop dependencies
-        run: npm ci
+          wget -qO - https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_22.04/Release.key | sudo apt-key add -
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.20.1/yq_linux_amd64 && chmod a+x /usr/local/bin/yq
+          sudo apt-get update || true && sudo apt-get install -y ca-certificates libxtst-dev libpng++-dev gcc-aarch64-linux-gnu g++-aarch64-linux-gnu jq icnsutils graphicsmagick tzdata
+          npm ci
   
       - name: Set Environment Variables
         run: |
@@ -71,14 +65,6 @@ jobs:
             echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
           fi
 
-          echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
-          echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          echo "BUILD_SUFFIX=${BUILD_SUFFIX}" >> $GITHUB_ENV
-          if [ -n "${ZEPHYR_ENABLE}" ]; then
-            echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
-          fi
-  
       - name: Checkout mattermost
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
         with:
@@ -97,16 +83,11 @@ jobs:
           npm run test:e2e:send-report
 
   e2e-macos:
-      runs-on: ${{ matrix.os }}
-      strategy:
-        matrix:
-          os: [macos-12]
-          node-version: [18.x]
+      runs-on: macos-12
 
       steps:
         - name: ci/checkout-repo
           uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-
         - name: ci/setup-node
           uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
           with:
@@ -114,17 +95,14 @@ jobs:
             cache: "npm"
             cache-dependency-path: package-lock.json
 
-        # - name: Setup go
-        #   uses: actions/setup-go@v2
-        #   with:
-        #     go-version: '1.20'
-
-        - name: Install Desktop dependencies
-          run: npm ci
+        - name: Setup go
+          uses: actions/setup-go@v2
+          with:
+            go-version: '1.20'
 
         - name: ci/install-dependencies
           env:
-            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 0
           run: |
             brew install yq
             jq '.mac.target=["zip"]' electron-builder.json | jq '.mac.gatekeeperAssess=false' > /tmp/electron-builder.json && cp /tmp/electron-builder.json .
@@ -143,12 +121,15 @@ jobs:
             repository: mattermost/mattermost
             path: mattermost
 
-        - name: Run mattermsot server & Playwright tests (macOS)
+        - name: Run mattermsot server 
           run: |
             cd mattermost/server
             make test-data || true
-            make run-server
-            cd ../..
+            make run-server &
+
+        - name: Playwright tests (macOS)  
+          run : |
+            bash ./scripts/wait-for-server.sh
             npm run test:e2e || true
             # npm run test:e2e:send-report
 
