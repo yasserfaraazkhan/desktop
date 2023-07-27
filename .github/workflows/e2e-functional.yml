@@ -18,7 +18,6 @@ env:
   TYPE: ${{ github.event_name == 'pull_request' && 'PR' || '' }}
   WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
   ZEPHYR_API_KEY: ${{ secrets.ZEPHYR_API_KEY }}
-  ZEPHYR_ENABLE: 'true'
   ZEPHYR_ENVIRONMENT_NAME: 'Desktop app'
   ZEPHYR_FOLDER_ID: ${{ secrets.ZEPHYR_FOLDER_ID }}
 
@@ -35,6 +34,7 @@ jobs:
           node-version-file: "package.json"
           cache: "npm"
           cache-dependency-path: package-lock.json
+
       - name: ci/install-dependencies
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 0
@@ -61,9 +61,6 @@ jobs:
           echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-          if [ -n "${ZEPHYR_ENABLE}" ]; then
-            echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
-          fi
 
       - name: Checkout mattermost
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
@@ -81,56 +78,52 @@ jobs:
           npm run test:e2e || true
           npm run test:e2e:send-report
 
-  # e2e-macos:
-  #     runs-on: macos-12
+  e2e-macos:
+      runs-on: macos-12
 
-  #     steps:
-  #       - name: ci/checkout-repo
-  #         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #       - name: ci/setup-node
-  #         uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
-  #         with:
-  #           node-version-file: "package.json"
-  #           cache: "npm"
-  #           cache-dependency-path: package-lock.json
+      steps:
+        - name: ci/checkout-repo
+          uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        - name: ci/setup-node
+          uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
+          with:
+            node-version-file: "package.json"
+            cache: "npm"
+            cache-dependency-path: package-lock.json
 
-  #       - name: Setup go
-  #         uses: actions/setup-go@v2
-  #         with:
-  #           go-version: '1.20'
+        - name: Setup go
+          uses: actions/setup-go@v2
+          with:
+            go-version: '1.20'
 
-  #       - name: ci/install-dependencies
-  #         env:
-  #           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 0
-  #         run: |
-  #           brew install yq
-  #           jq '.mac.target=["zip"]' electron-builder.json | jq '.mac.gatekeeperAssess=false' > /tmp/electron-builder.json && cp /tmp/electron-builder.json .
-  #           npm ci
+        - name: ci/install-dependencies
+          env:
+            PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 0
+          run: |
+            brew install yq
+            jq '.mac.target=["zip"]' electron-builder.json | jq '.mac.gatekeeperAssess=false' > /tmp/electron-builder.json && cp /tmp/electron-builder.json .
+            npm ci
 
-  #       - name: Setup Docker on macOS
-  #         run: |
-  #           brew install docker docker-compose
-  #           colima start
-  #           mkdir -p ~/.docker/cli-plugins
-  #           ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
+        - name: Setup Docker on macOS
+          run: |
+            brew install docker docker-compose
+            colima start
+            mkdir -p ~/.docker/cli-plugins
+            ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 
-  #       - name: Checkout mattermost
-  #         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #         with:
-  #           repository: mattermost/mattermost
-  #           path: mattermost
+        - name: Checkout mattermost
+          uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+          with:
+            repository: mattermost/mattermost
+            path: mattermost
 
-  #       - name: Run mattermsot server 
-  #         run: |
-  #           cd mattermost/server
-  #           make test-data || true
-  #           make run-server &
-
-  #       - name: Playwright tests (macOS)  
-  #         run : |
-  #           bash ./.github/workflows/scripts/wait-for-server.sh
-  #           npm run test:e2e || true
-  #           # npm run test:e2e:send-report
+        - name: Run mattermsot server 
+          run: |
+            cd mattermost/e2e-tests
+            echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
+            make start-server && make prepare-server
+            npm run test:e2e || true
+            # npm run test:e2e:send-report
 
   # e2e-windows:
   #   runs-on: ${{ matrix.os }}
