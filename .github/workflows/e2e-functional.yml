@@ -212,7 +212,7 @@ jobs:
         with:
           repository: mattermost/mattermost
           path: mattermost
-          ref: fix-e2e-macos-support
+          ref: fix-e2e-win-support
 
       - name: Run mattermsot server & Playwright tests (Windows OS)
         run: |
