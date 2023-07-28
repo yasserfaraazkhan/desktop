@@ -221,3 +221,4 @@ jobs:
           make start-server && make prepare-server
           # npm run test:e2e || true
           # npm run test:e2e:send-report
+        shell: bash
