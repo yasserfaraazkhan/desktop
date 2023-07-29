@@ -191,9 +191,15 @@ jobs:
           wsl sudo service docker start
           wsl sudo adduser $USER docker
           wsl docker --version
-          wsl docker-compose --version
+          wsl docker compose --version
           wsl --shutdown
 
+      - name: Set Docker network driver to NAT
+        run: |
+          echo '{ "default-address-pools": [ {"base": "172.80.0.0/16","size": 24} ] }' > daemon.json
+          wsl mkdir -p /mnt/c/Users/runneradmin/.docker
+          wsl mv daemon.json /mnt/c/Users/runneradmin/.docker/
+    
       # - name: Set Environment Variables
       #   run: |
       #     if "%github_event_name%" == "pull_request" (
