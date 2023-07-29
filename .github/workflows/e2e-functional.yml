@@ -188,8 +188,8 @@ jobs:
           wsl sudo apt update
           wsl sudo apt install -y docker.io
           wsl sudo service docker start
-          wsl sudo usermod -aG docker $USER
-
+          wsl sudo adduser $USER docker
+          wsl --shutdown
     
       - name: ci/install-dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
