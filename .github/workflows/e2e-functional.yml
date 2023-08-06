@@ -194,11 +194,11 @@ jobs:
           wsl docker compose --version
           wsl --shutdown
 
-      - name: Set Docker network driver to NAT
-        run: |
-          echo '{ "default-address-pools": [ {"base": "172.80.0.0/16","size": 24} ] }' > daemon.json
-          wsl mkdir -p /mnt/c/Users/runneradmin/.docker
-          wsl mv daemon.json /mnt/c/Users/runneradmin/.docker/
+      # - name: Set Docker network driver to NAT
+      #   run: |
+      #     echo '{ "default-address-pools": [ {"base": "172.80.0.0/16","size": 24} ] }' > daemon.json
+      #     wsl mkdir -p /mnt/c/Users/runneradmin/.docker
+      #     wsl mv daemon.json /mnt/c/Users/runneradmin/.docker/
     
       # - name: Set Environment Variables
       #   run: |
