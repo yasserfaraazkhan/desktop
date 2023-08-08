@@ -193,22 +193,22 @@ jobs:
           echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
 
-      # - name: Set Environment Variables
-      #   run: |
-      #     if "%github_event_name%" == "pull_request" (
-      #       echo BRANCH=%github_ref% >> $env:GITHUB_ENV
-      #       echo BUILD_SUFFIX=desktop-pr >> $env:GITHUB_ENV
-      #     ) elseif "%github_event_name%" == "release" (
-      #       echo BRANCH=%github_ref% >> $env:GITHUB_ENV
-      #       echo BUILD_SUFFIX=desktop-release >> $env:GITHUB_ENV
-      #       echo ZEPHYR_ENABLE=true >> $env:GITHUB_ENV
-      #     ) elseif "%github_event_name%" == "schedule" (
-      #       echo BRANCH=%github_ref% >> $env:GITHUB_ENV
-      #       echo BUILD_SUFFIX=desktop-nightly >> $env:GITHUB_ENV
-      #     )
-      #     echo BUILD_ID=%github_run_id%-desktop-%runner_os% >> $env:GITHUB_ENV
-      #     echo BUILD_TAG=%GITHUB_SHA:~0,7% >> $env:GITHUB_ENV
-      #     echo PULL_REQUEST=%PULL_REQUEST_BASE_URL%%github_event_pull_request_number% >> $env:GITHUB_ENV
+      - name: Set Environment Variables
+        run: |
+          if "%github_event_name%" == "pull_request" (
+            echo BRANCH=%github_ref% >> $env:GITHUB_ENV
+            echo BUILD_SUFFIX=desktop-pr >> $env:GITHUB_ENV
+          ) elseif "%github_event_name%" == "release" (
+            echo BRANCH=%github_ref% >> $env:GITHUB_ENV
+            echo BUILD_SUFFIX=desktop-release >> $env:GITHUB_ENV
+            echo ZEPHYR_ENABLE=true >> $env:GITHUB_ENV
+          ) elseif "%github_event_name%" == "schedule" (
+            echo BRANCH=%github_ref% >> $env:GITHUB_ENV
+            echo BUILD_SUFFIX=desktop-nightly >> $env:GITHUB_ENV
+          )
+          echo BUILD_ID=%github_run_id%-desktop-%runner_os% >> $env:GITHUB_ENV
+          echo BUILD_TAG=%GITHUB_SHA:~0,7% >> $env:GITHUB_ENV
+          echo PULL_REQUEST=%PULL_REQUEST_BASE_URL%%github_event_pull_request_number% >> $env:GITHUB_ENV
 
       - name: Run mattermsot server & Playwright tests (Windows OS)
         run: |
