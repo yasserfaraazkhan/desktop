@@ -178,14 +178,14 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          if "%github_event_name%" == "pull_request" (
+          if ("%github_event_name%" == "pull_request") (
             echo BRANCH=%github_ref% >> $env:GITHUB_ENV
             echo BUILD_SUFFIX=desktop-pr >> $env:GITHUB_ENV
-          ) elseif "%github_event_name%" == "release" (
+          ) else if ("%github_event_name%" == "release") (
             echo BRANCH=%github_ref% >> $env:GITHUB_ENV
             echo BUILD_SUFFIX=desktop-release >> $env:GITHUB_ENV
             echo ZEPHYR_ENABLE=true >> $env:GITHUB_ENV
-          ) elseif "%github_event_name%" == "schedule" (
+          ) else if ("%github_event_name%" == "schedule") (
             echo BRANCH=%github_ref% >> $env:GITHUB_ENV
             echo BUILD_SUFFIX=desktop-nightly >> $env:GITHUB_ENV
           )
