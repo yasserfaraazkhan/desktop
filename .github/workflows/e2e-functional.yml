@@ -164,13 +164,13 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
-      - name: Install GO
-        uses: actions/setup-go@v4.0.1
-        with:
-          go-version: "1.20"
+      # - name: Install GO
+      #   uses: actions/setup-go@v4.0.1
+      #   with:
+      #     go-version: "1.20"
 
-      - name: Setup WSL
-        uses: Vampire/setup-wsl@v2.0.1
+      # - name: Setup WSL
+      #   uses: Vampire/setup-wsl@v2.0.1
 
       - name: ci/install-node-gyp
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
@@ -184,15 +184,15 @@ jobs:
           node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers" --arch arm64
           node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers" --arch ia32
 
-      - name: Install Docker in WSL
-        run: |
-          wsl sudo apt update
-          wsl sudo apt install -y docker.io
-          wsl sudo service docker start
-          wsl sudo adduser $USER docker
-          wsl docker --version
-          wsl docker compose --version
-          wsl --shutdown
+      # - name: Install Docker in WSL
+      #   run: |
+      #     wsl sudo apt update
+      #     wsl sudo apt install -y docker.io
+      #     wsl sudo service docker start
+      #     wsl sudo adduser $USER docker
+      #     wsl docker --version
+      #     wsl docker compose --version
+      #     wsl --shutdown
 
       # - name: Set Docker network driver to NAT
       #   run: |
@@ -217,18 +217,18 @@ jobs:
       #     echo BUILD_TAG=%GITHUB_SHA:~0,7% >> $env:GITHUB_ENV
       #     echo PULL_REQUEST=%PULL_REQUEST_BASE_URL%%github_event_pull_request_number% >> $env:GITHUB_ENV
         
-      - name: Checkout mattermost
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-        with:
-          repository: mattermost/mattermost
-          path: mattermost
-          ref: fix-e2e-win-support
+      # - name: Checkout mattermost
+      #   uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      #   with:
+      #     repository: mattermost/mattermost
+      #     path: mattermost
+      #     ref: fix-e2e-win-support
 
       - name: Run mattermsot server & Playwright tests (Windows OS)
         run: |
-          cd mattermost/e2e-tests
-          echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
-          make start-server && make prepare-server
-          # npm run test:e2e || true
-          # npm run test:e2e:send-report
+          # cd mattermost/e2e-tests
+          # echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
+          # make start-server && make prepare-server
+          npm run test:e2e || true
+          npm run test:e2e:send-report
         shell: bash
