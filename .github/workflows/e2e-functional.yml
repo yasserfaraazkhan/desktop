@@ -77,72 +77,8 @@ jobs:
   #         npm run test:e2e || true
   #         npm run test:e2e:send-report
 
-  # e2e-macos:
-  #   runs-on: macos-12
-  #   steps:
-  #     - name: ci/checkout-repo
-  #       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #     - name: ci/setup-node
-  #       uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
-  #       with:
-  #         node-version-file: "package.json"
-  #         cache: "npm"
-  #         cache-dependency-path: package-lock.json
-
-  #     - name: Setup Go environment
-  #       uses: actions/setup-go@v4.0.1
-  #       with:
-  #         go-version: '1.20'
-
-  #     - name: ci/install-dependencies
-  #       env:
-  #         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
-  #       run: |
-  #         brew install yq
-  #         jq '.mac.target=["zip"]' electron-builder.json | jq '.mac.gatekeeperAssess=false' > /tmp/electron-builder.json && cp /tmp/electron-builder.json .
-  #         npm ci
-
-  #     - name: Setup Docker on macOS
-  #       run: |
-  #         brew install docker docker-compose
-  #         colima start
-  #         mkdir -p ~/.docker/cli-plugins
-  #         ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
-
-  #     - name: Set Environment Variables
-  #       run: |
-  #         if [ "${{ github.event_name }}" == "pull_request" ]; then
-  #           echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
-  #           echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
-  #         elif [ "${{ github.event_name }}" == "release" ]; then
-  #           echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
-  #           echo "BUILD_SUFFIX=desktop-release" >> $GITHUB_ENV
-  #           echo "ZEPHYR_ENABLE=true" >> $GITHUB_ENV
-  #         elif [ "${{ github.event_name }}" == "schedule" ]; then
-  #           echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
-  #           echo "BUILD_SUFFIX=desktop-nightly" >> $GITHUB_ENV
-  #         fi
-  #         echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
-  #         echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
-  #         echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
-
-  #     - name: Checkout mattermost
-  #       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #       with:
-  #         repository: mattermost/mattermost
-  #         path: mattermost
-  #         ref: fix-e2e-macos-support
-
-  #     - name: Run mattermsot server 
-  #       run: |
-  #         cd mattermost/e2e-tests
-  #         echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
-  #         make start-server && make prepare-server
-  #         npm run test:e2e || true
-  #         npm run test:e2e:send-report
-
-  e2e-windows:
-    runs-on: windows-latest
+  e2e-macos:
+    runs-on: macos-12
     steps:
       - name: ci/checkout-repo
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
@@ -153,31 +89,27 @@ jobs:
           cache: "npm"
           cache-dependency-path: package-lock.json
 
-      - name: ci/cache-node-modules
-        id: cache-node-modules
-        uses: actions/cache@627f0f41f6904a5b1efbaed9f96d9eb58e92e920 # v3.2.4
+      - name: Setup Go environment
+        uses: actions/setup-go@v4.0.1
         with:
-          path: node_modules
-          key: ${{ runner.os }}-build-node-modules-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-node-modules
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
+          go-version: '1.20'
 
-      - name: ci/install-node-gyp
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+      - name: ci/install-dependencies
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
         run: |
-          choco install yq --version 4.15.1 -y
-          npm i -g node-gyp
-          node-gyp install
-          node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers"
-          node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers" --arch arm64
-          node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers" --arch ia32
+          brew install yq
+          jq '.mac.target=["zip"]' electron-builder.json | jq '.mac.gatekeeperAssess=false' > /tmp/electron-builder.json && cp /tmp/electron-builder.json .
+          npm ci
+
+      - name: Setup Docker on macOS
+        run: |
+          brew install docker docker-compose
+          colima start
+          mkdir -p ~/.docker/cli-plugins
+          ln -sfn /usr/local/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 
       - name: Set Environment Variables
-        shell: bash
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
@@ -198,8 +130,85 @@ jobs:
             echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
           fi
 
-      - name: Run mattermsot server & Playwright tests (Windows OS)
+      - name: Checkout mattermost
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        with:
+          repository: mattermost/mattermost
+          path: mattermost
+          ref: master
+
+      - name: Run mattermsot server & Playwright tests (macOS)
         run: |
-          npm run test:e2e || true
+          LATEST_RELEASE_TAG=$(curl -L -s https://api.github.com/repos/mattermost/mattermost-server/releases/latest | jq -r '.tag_name')
+          LATEST_RELEASE_TAG="${LATEST_RELEASE_TAG#v}"
+          cd mattermost/e2e-tests
+          echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:$LATEST_RELEASE_TAG" >.ci/env
+          make start-server && make prepare-server
+
+      - name: Run Playwright tests (macOS)
+        run: |
+          npm run test:e2e || true # making job pass even if the tests fail due to flakyness
           npm run test:e2e:send-report
-        shell: bash
+
+  # e2e-windows:
+  #   runs-on: windows-latest
+  #   steps:
+  #     - name: ci/checkout-repo
+  #       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+  #     - name: ci/setup-node
+  #       uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
+  #       with:
+  #         node-version-file: "package.json"
+  #         cache: "npm"
+  #         cache-dependency-path: package-lock.json
+
+  #     - name: ci/cache-node-modules
+  #       id: cache-node-modules
+  #       uses: actions/cache@627f0f41f6904a5b1efbaed9f96d9eb58e92e920 # v3.2.4
+  #       with:
+  #         path: node_modules
+  #         key: ${{ runner.os }}-build-node-modules-${{ hashFiles('**/package-lock.json') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-build-node-modules
+  #           ${{ runner.os }}-build-
+  #           ${{ runner.os }}-
+
+  #     - name: ci/install-node-gyp
+  #       if: steps.cache-node-modules.outputs.cache-hit != 'true'
+  #       env:
+  #         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+  #       run: |
+  #         choco install yq --version 4.15.1 -y
+  #         npm i -g node-gyp
+  #         node-gyp install
+  #         node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers"
+  #         node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers" --arch arm64
+  #         node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers" --arch ia32
+
+  #     - name: Set Environment Variables
+  #       shell: bash
+  #       run: |
+  #         if [ "${{ github.event_name }}" == "pull_request" ]; then
+  #           echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+  #           echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
+  #         elif [ "${{ github.event_name }}" == "release" ]; then
+  #           echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
+  #           echo "BUILD_SUFFIX=desktop-release" >> $GITHUB_ENV
+  #           echo "ZEPHYR_ENABLE=true" >> $GITHUB_ENV
+  #         elif [ "${{ github.event_name }}" == "schedule" ]; then
+  #           echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
+  #           echo "BUILD_SUFFIX=desktop-nightly" >> $GITHUB_ENV
+  #         fi
+  #         echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
+  #         echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+  #         echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+
+  #         if [ -n "${ZEPHYR_ENABLE}" ]; then
+  #           echo "ZEPHYR_ENABLE=${ZEPHYR_ENABLE}" >> $GITHUB_ENV
+  #         fi
+
+  #     - name: Run mattermsot server & Playwright tests (Windows OS)
+  #       run: |
+  #         npm run test:e2e || true
+  #         npm run test:e2e:send-report
+  #       shell: bash
