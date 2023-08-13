@@ -22,60 +22,60 @@ env:
   ZEPHYR_FOLDER_ID: ${{ secrets.ZEPHYR_FOLDER_ID }}
 
 jobs:
-  # e2e-linux:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: ci/checkout-repo
-  #       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #     - name: ci/setup-node
-  #       uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
-  #       with:
-  #         node-version-file: "package.json"
-  #         cache: "npm"
-  #         cache-dependency-path: package-lock.json
+  e2e-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ci/checkout-repo
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+      - name: ci/setup-node
+        uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
+        with:
+          node-version-file: "package.json"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
 
-  #     - name: ci/install-dependencies
-  #       env:
-  #         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
-  #       run: |
-  #         wget -qO - https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_22.04/Release.key | sudo apt-key add -
-  #         wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.20.1/yq_linux_amd64 && chmod a+x /usr/local/bin/yq
-  #         sudo apt-get update || true && sudo apt-get install -y ca-certificates libxtst-dev libpng++-dev gcc-aarch64-linux-gnu g++-aarch64-linux-gnu jq icnsutils graphicsmagick tzdata
-  #         npm ci
+      - name: ci/install-dependencies
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+        run: |
+          wget -qO - https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_22.04/Release.key | sudo apt-key add -
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.20.1/yq_linux_amd64 && chmod a+x /usr/local/bin/yq
+          sudo apt-get update || true && sudo apt-get install -y ca-certificates libxtst-dev libpng++-dev gcc-aarch64-linux-gnu g++-aarch64-linux-gnu jq icnsutils graphicsmagick tzdata
+          npm ci
   
-  #     - name: Set Environment Variables
-  #       run: |
-  #         if [ "${{ github.event_name }}" == "pull_request" ]; then
-  #           echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
-  #           echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
-  #         elif [ "${{ github.event_name }}" == "release" ]; then
-  #           echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
-  #           echo "BUILD_SUFFIX=desktop-release" >> $GITHUB_ENV
-  #           echo "ZEPHYR_ENABLE=true" >> $GITHUB_ENV
-  #         elif [ "${{ github.event_name }}" == "schedule" ]; then
-  #           echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
-  #           echo "BUILD_SUFFIX=desktop-nightly" >> $GITHUB_ENV
-  #         fi
-  #         echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
-  #         echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
-  #         echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+      - name: Set Environment Variables
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+            echo "BUILD_SUFFIX=desktop-pr" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" == "release" ]; then
+            echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
+            echo "BUILD_SUFFIX=desktop-release" >> $GITHUB_ENV
+            echo "ZEPHYR_ENABLE=true" >> $GITHUB_ENV
+          elif [ "${{ github.event_name }}" == "schedule" ]; then
+            echo "BRANCH=${{ github.ref }}" >> $GITHUB_ENV
+            echo "BUILD_SUFFIX=desktop-nightly" >> $GITHUB_ENV
+          fi
+          echo "BUILD_ID=${{ github.run_id }}-${BUILD_SUFFIX}-${{ runner.os }}" >> $GITHUB_ENV
+          echo "BUILD_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "PULL_REQUEST=${PULL_REQUEST_BASE_URL}${{ github.event.pull_request.number }}" >> $GITHUB_ENV
 
-  #     - name: Checkout mattermost
-  #       uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
-  #       with:
-  #         repository: mattermost/mattermost
-  #         path: mattermost
-  #         ref: fix-e2e-macos-support
+      - name: Checkout mattermost
+        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        with:
+          repository: mattermost/mattermost
+          path: mattermost
+          ref: fix-e2e-macos-support
 
-  #     - name: Run mattermsot server & Playwright tests (Ubuntu OS)
-  #       run: |
-  #         cd mattermost/e2e-tests
-  #         echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
-  #         make start-server && make prepare-server
-  #         export DISPLAY=:99
-  #         Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
-  #         npm run test:e2e || true
-  #         npm run test:e2e:send-report
+      - name: Run mattermsot server & Playwright tests (Ubuntu OS)
+        run: |
+          cd mattermost/e2e-tests
+          echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
+          make start-server && make prepare-server
+          export DISPLAY=:99
+          Xvfb $DISPLAY -screen 0 1024x768x24 > /dev/null 2>&1 &
+          npm run test:e2e || true
+          npm run test:e2e:send-report
 
   e2e-macos:
     runs-on: macos-12
@@ -139,10 +139,8 @@ jobs:
 
       - name: Run mattermsot server & Playwright tests (macOS)
         run: |
-          LATEST_RELEASE_TAG=$(curl -L -s https://api.github.com/repos/mattermost/mattermost-server/releases/latest | jq -r '.tag_name')
-          LATEST_RELEASE_TAG="${LATEST_RELEASE_TAG#v}"
           cd mattermost/e2e-tests
-          echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:$LATEST_RELEASE_TAG" >.ci/env
+          echo "SERVER_IMAGE=mattermost/mattermost-enterprise-edition:release-8.0" >.ci/env
           make start-server && make prepare-server
 
       - name: Run Playwright tests (macOS)
