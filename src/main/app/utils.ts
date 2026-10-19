@@ -1,45 +1,37 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import path from 'path';
+import type {BrowserWindow, Rectangle} from 'electron';
+import {app, screen, session} from 'electron';
+import isDev from 'electron-is-dev';
 
-import fs from 'fs-extra';
-
-import {app, BrowserWindow, Menu, Rectangle, Session, session, dialog, nativeImage, screen} from 'electron';
-
-import {MigrationInfo} from 'types/config';
-import {RemoteInfo} from 'types/server';
-import {Boundaries} from 'types/utils';
-
+import MainWindow from 'app/mainWindow/mainWindow';
+import MessageModal from 'app/mainWindow/modals/messageModal';
+import MenuManager from 'app/menus';
+import NavigationManager from 'app/navigationManager';
+import {MAIN_WINDOW_CREATED} from 'common/communication';
 import Config from 'common/config';
+import {MATTERMOST_PROTOCOL} from 'common/constants';
 import {Logger} from 'common/log';
-import JsonFileManager from 'common/JsonFileManager';
-import ServerManager from 'common/servers/serverManager';
 import {MattermostServer} from 'common/servers/MattermostServer';
-import {APP_MENU_WILL_CLOSE} from 'common/communication';
-import {isValidURI} from 'common/utils/url';
-
-import updateManager from 'main/autoUpdater';
-import {migrationInfoPath, updatePaths} from 'main/constants';
+import ServerManager from 'common/servers/serverManager';
+import {isValidURI, parseURL} from 'common/utils/url';
 import {localizeMessage} from 'main/i18nManager';
-import {createMenu as createAppMenu} from 'main/menus/app';
-import {createMenu as createTrayMenu} from 'main/menus/tray';
 import {ServerInfo} from 'main/server/serverInfo';
-import Tray from 'main/tray/tray';
-import ViewManager from 'main/views/viewManager';
-import MainWindow from 'main/windows/mainWindow';
 
-import {mainProtocol} from './initialize';
+import type {RemoteInfo} from 'types/server';
+import type {Boundaries} from 'types/utils';
 
-const assetsDir = path.resolve(app.getAppPath(), 'assets');
-const appIconURL = path.resolve(assetsDir, 'appicon_with_spacing_32.png');
-const appIcon = nativeImage.createFromPath(appIconURL);
 const log = new Logger('App.Utils');
 
 export function openDeepLink(deeplinkingUrl: string) {
     try {
-        MainWindow.show();
-        ViewManager.handleDeepLink(deeplinkingUrl);
+        if (MainWindow.get()) {
+            MainWindow.show();
+            NavigationManager.openLinkInPrimaryTab(deeplinkingUrl);
+        } else {
+            MainWindow.on(MAIN_WINDOW_CREATED, () => NavigationManager.openLinkInPrimaryTab(deeplinkingUrl));
+        }
     } catch (err) {
         log.error(`There was an error opening the deeplinking url: ${err}`);
     }
@@ -51,28 +43,12 @@ export function updateSpellCheckerLocales() {
     }
 }
 
-export function handleUpdateMenuEvent() {
-    log.debug('handleUpdateMenuEvent');
-
-    const aMenu = createAppMenu(Config, updateManager);
-    Menu.setApplicationMenu(aMenu);
-    aMenu.addListener('menu-will-close', () => {
-        ViewManager.focusCurrentView();
-        MainWindow.sendToRenderer(APP_MENU_WILL_CLOSE);
-    });
-
-    // set up context menu for tray icon
-    if (shouldShowTrayIcon()) {
-        const tMenu = createTrayMenu();
-        Tray.setMenu(tMenu);
-    }
-}
-
 export function getDeeplinkingURL(args: string[]) {
     if (Array.isArray(args) && args.length) {
     // deeplink urls should always be the last argument, but may not be the first (i.e. Windows with the app already running)
         const url = args[args.length - 1];
-        if (url && mainProtocol && url.startsWith(mainProtocol) && isValidURI(url)) {
+        const protocol = isDev ? 'mattermost-dev' : MATTERMOST_PROTOCOL;
+        if (url && protocol && url.startsWith(protocol) && isValidURI(url)) {
             return url;
         }
     }
@@ -94,7 +70,7 @@ export function clearAppCache() {
         mainWindow.webContents.session.clearCache().
             then(mainWindow.webContents.reload).
             catch((err) => {
-                log.error('clearAppCache', err);
+                log.error('clearAppCache', {err});
             });
     } else {
     //Wait for mainWindow
@@ -143,116 +119,145 @@ function getValidWindowPosition(state: Rectangle) {
     return {x: state.x, y: state.y};
 }
 
-export function resizeScreen(browserWindow: BrowserWindow) {
-    function handle() {
-        log.debug('resizeScreen.handle');
-        const position = browserWindow.getPosition();
-        const size = browserWindow.getSize();
-        const validPosition = getValidWindowPosition({
-            x: position[0],
-            y: position[1],
-            width: size[0],
-            height: size[1],
-        });
-        if (typeof validPosition.x !== 'undefined' || typeof validPosition.y !== 'undefined') {
-            browserWindow.setPosition(validPosition.x || 0, validPosition.y || 0);
-        } else {
-            browserWindow.center();
-        }
+function getNewWindowPosition(browserWindow: BrowserWindow) {
+    const mainWindow = MainWindow.get();
+    if (!mainWindow) {
+        return browserWindow.getPosition();
     }
 
-    browserWindow.once('restore', handle);
-    handle();
+    const newWindowSize = browserWindow.getSize();
+    const mainWindowSize = mainWindow.getSize();
+    const mainWindowPosition = mainWindow.getPosition();
+
+    return [
+        Math.floor(mainWindowPosition[0] + ((mainWindowSize[0] - newWindowSize[0]) / 2)),
+        Math.floor(mainWindowPosition[1] + ((mainWindowSize[1] - newWindowSize[1]) / 2)),
+    ];
 }
 
-export function flushCookiesStore(session: Session) {
+export function resizeScreen(browserWindow: BrowserWindow) {
+    const position = getNewWindowPosition(browserWindow);
+    const size = browserWindow.getSize();
+    const validPosition = getValidWindowPosition({
+        x: position[0],
+        y: position[1],
+        width: size[0],
+        height: size[1],
+    });
+    if (typeof validPosition.x !== 'undefined' || typeof validPosition.y !== 'undefined') {
+        browserWindow.setPosition(validPosition.x || 0, validPosition.y || 0);
+    } else {
+        browserWindow.center();
+    }
+}
+
+export function flushCookiesStore() {
     log.debug('flushCookiesStore');
-    session.cookies.flushStore().catch((err) => {
+    session.defaultSession.cookies.flushStore().catch((err) => {
         log.error(`There was a problem flushing cookies:\n${err}`);
     });
 }
 
-export function initCookieManager(session: Session) {
-    // Somehow cookies are not immediately saved to disk.
-    // So manually flush cookie store to disk on closing the app.
-    // https://github.com/electron/electron/issues/8416
-    app.on('before-quit', () => {
-        flushCookiesStore(session);
-    });
-
-    app.on('browser-window-blur', () => {
-        flushCookiesStore(session);
-    });
-}
-
-export function migrateMacAppStore() {
-    const migrationPrefs = new JsonFileManager<MigrationInfo>(migrationInfoPath);
-    const oldPath = path.join(app.getPath('userData'), '../../../../../../../Library/Application Support/Mattermost');
-
-    // Check if we've already migrated
-    if (migrationPrefs.getValue('masConfigs')) {
-        return;
-    }
-
-    // Check if the files are there to migrate
-    try {
-        const exists = fs.existsSync(oldPath);
-        if (!exists) {
-            log.info('MAS: No files to migrate, skipping');
+export async function updateServerInfos(servers: MattermostServer[]) {
+    await Promise.all(servers.map(async (srv) => {
+        const serverInfo = new ServerInfo(srv);
+        let data: RemoteInfo;
+        try {
+            data = await serverInfo.fetchRemoteInfo();
+        } catch (error) {
+            log.error('updateServerInfos: Failed to fetch remote info', {error});
             return;
         }
-    } catch (e) {
-        log.error('MAS: Failed to check for existing Mattermost Desktop install, skipping', e);
+
+        if (data.siteURL) {
+            // The site URL comes from the server's client configuration, so it cannot be trusted to be a valid URL
+            const siteURL = parseURL(data.siteURL);
+            if (!siteURL) {
+                log.warn('updateServerInfos: Received an invalid site URL from the server', {serverId: srv.id});
+                ServerManager.updateRemoteInfo(srv.id, data, false);
+                return;
+            }
+
+            // We need to validate the site URL is reachable by pinging the server
+            const tempServer = new MattermostServer({name: 'temp', url: siteURL.toString()}, false);
+            const tempServerInfo = new ServerInfo(tempServer);
+            try {
+                const tempRemoteInfo = await tempServerInfo.fetchConfigData();
+                if (tempRemoteInfo.siteURL === data.siteURL) {
+                    ServerManager.updateRemoteInfo(srv.id, data, true);
+                    return;
+                }
+            } catch (error) {
+                log.error('updateServerInfos: Failed to fetch temp remote info', {error});
+                ServerManager.updateRemoteInfo(srv.id, data, false);
+                return;
+            }
+        }
+
+        ServerManager.updateRemoteInfo(srv.id, data, false);
+    }));
+
+    // TODO: Would be better encapsulated in the MenuManager
+    MenuManager.refreshMenu();
+}
+
+export async function clearDataForServer(server: MattermostServer) {
+    const mainWindow = MainWindow.get();
+    if (!mainWindow) {
         return;
     }
 
-    const cancelImport = dialog.showMessageBoxSync({
-        title: app.name,
-        message: localizeMessage('main.app.utils.migrateMacAppStore.dialog.message', 'Import Existing Configuration'),
-        detail: localizeMessage('main.app.utils.migrateMacAppStore.dialog.detail', 'It appears that an existing {appName} configuration exists, would you like to import it? You will be asked to pick the correct configuration directory.', {appName: app.name}),
-        icon: appIcon,
+    const response = await MessageModal.showMessageModal({
+        title: server.name,
+        type: 'warning',
         buttons: [
-            localizeMessage('main.app.utils.migrateMacAppStore.button.selectAndImport', 'Select Directory and Import'),
-            localizeMessage('main.app.utils.migrateMacAppStore.button.dontImport', 'Don\'t Import'),
+            localizeMessage('main.app.utils.clearDataForServer.confirm', 'Clear Data'),
+            localizeMessage('main.app.utils.clearDataForServer.cancel', 'Cancel'),
         ],
-        type: 'info',
-        defaultId: 0,
+        defaultId: 1,
         cancelId: 1,
+        message: localizeMessage('main.app.utils.clearDataForServer.message', 'This action will erase all session, cache, cookie and storage data for the server "{serverName}". Are you sure you want to clear data for this server?', {serverName: server.name}),
     });
 
-    if (cancelImport) {
-        migrationPrefs.setValue('masConfigs', true);
-        return;
-    }
+    if (response.response === 0) {
+        await session.defaultSession.clearData({
+            origins: [server.url.origin],
+        });
 
-    const result = dialog.showOpenDialogSync({
-        defaultPath: oldPath,
-        properties: ['openDirectory'],
-    });
-    if (!(result && result[0])) {
-        return;
-    }
-
-    try {
-        fs.copySync(result[0], app.getPath('userData'));
-        updatePaths(true);
-        migrationPrefs.setValue('masConfigs', true);
-    } catch (e) {
-        log.error('MAS: An error occurred importing the existing configuration', e);
+        ServerManager.reloadServer(server.id);
     }
 }
 
-export async function updateServerInfos(servers: MattermostServer[]) {
-    const map: Map<string, RemoteInfo> = new Map();
-    await Promise.all(servers.map((srv) => {
-        const serverInfo = new ServerInfo(srv);
-        return serverInfo.fetchRemoteInfo().
-            then((data) => {
-                map.set(srv.id, data);
-            }).
-            catch((error) => {
-                log.warn('Could not get server info for', srv.name, error);
-            });
-    }));
-    ServerManager.updateRemoteInfos(map);
+export async function clearAllData() {
+    const mainWindow = MainWindow.get();
+    if (!mainWindow) {
+        return;
+    }
+
+    const response = await MessageModal.showMessageModal({
+        title: app.name,
+        type: 'warning',
+        buttons: [
+            localizeMessage('main.app.utils.clearAllData.confirm', 'Clear All Data'),
+            localizeMessage('main.app.utils.clearAllData.cancel', 'Cancel'),
+        ],
+        defaultId: 1,
+        cancelId: 1,
+        message: localizeMessage('main.app.utils.clearAllData.message', 'This action will erase all session, cache, cookie and storage data for all server. Performing this action will restart the application. Are you sure you want to clear all data?'),
+    });
+
+    if (response.response === 0) {
+        await session.defaultSession.clearAuthCache();
+        await session.defaultSession.clearCodeCaches({});
+        await session.defaultSession.clearHostResolverCache();
+        await session.defaultSession.clearData();
+
+        // These are here to suppress an unnecessary exception thrown when the app is force exited
+        // The app will restart anyways so we don't need to handle the exception
+        process.removeAllListeners('uncaughtException');
+        process.removeAllListeners('unhandledRejection');
+
+        app.relaunch();
+        app.exit();
+    }
 }

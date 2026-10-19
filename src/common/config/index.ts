@@ -1,95 +1,66 @@
 // Copyright (c) 2015-2016 Yuya Ochiai
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
-import fs from 'fs';
-
-import os from 'os';
-import path from 'path';
 
 import {EventEmitter} from 'events';
 
-import {
+import JsonFileManager from 'common/JsonFileManager';
+import {Logger} from 'common/log';
+import {copy} from 'common/utils/util';
+import * as Validator from 'common/Validator';
+
+import type {
     AnyConfig,
     BuildConfig,
     CombinedConfig,
     ConfigServer,
-    Config as ConfigType,
-    RegistryConfig as RegistryConfigType,
+    CurrentConfig,
+    RegistryConfig as RegistryCurrentConfig,
 } from 'types/config';
 
-import {Logger} from 'common/log';
-import {getDefaultViewsForConfigServer} from 'common/views/View';
-import Utils, {copy} from 'common/utils/util';
-import * as Validator from 'common/Validator';
-
-import defaultPreferences, {getDefaultDownloadLocation} from './defaultPreferences';
-import upgradeConfigData from './upgradePreferences';
 import buildConfig from './buildConfig';
-import RegistryConfig, {REGISTRY_READ_EVENT} from './RegistryConfig';
+import defaultPreferences, {getDefaultDownloadLocation} from './defaultPreferences';
 import migrateConfigItems from './migrationPreferences';
+import policyConfigLoader from './policyConfigLoader';
+import upgradeConfigData from './upgradePreferences';
 
 const log = new Logger('Config');
 
 export class Config extends EventEmitter {
     private configFilePath?: string;
     private appName?: string;
-    private appPath?: string;
 
-    private registryConfig: RegistryConfig;
     private _predefinedServers: ConfigServer[];
-    private useNativeWindow: boolean;
+    private json?: JsonFileManager<CurrentConfig>;
 
     private combinedData?: CombinedConfig;
-    private localConfigData?: ConfigType;
-    private registryConfigData?: Partial<RegistryConfigType>;
-    private defaultConfigData?: ConfigType;
+    private localConfigData?: CurrentConfig;
+    private policyConfigData?: Partial<RegistryCurrentConfig>;
+    private defaultConfigData?: CurrentConfig;
     private buildConfigData?: BuildConfig;
-    private canUpgradeValue?: boolean;
 
     constructor() {
         super();
-        this.registryConfig = new RegistryConfig();
         this._predefinedServers = [];
         if (buildConfig.defaultServers) {
-            this._predefinedServers.push(...buildConfig.defaultServers.map((server, index) => getDefaultViewsForConfigServer({...server, order: index})));
-        }
-        try {
-            this.useNativeWindow = os.platform() === 'win32' && !Utils.isVersionGreaterThanOrEqualTo(os.release(), '6.2');
-        } catch {
-            this.useNativeWindow = false;
+            this._predefinedServers.push(...buildConfig.defaultServers.map((server, index) => ({...server, order: index, isPredefined: true})));
         }
     }
 
-    init = (configFilePath: string, appName: string, appPath: string) => {
+    init = (configFilePath: string, appName: string) => {
         this.configFilePath = configFilePath;
         this.appName = appName;
-        this.appPath = appPath;
-        this.canUpgradeValue = this.checkWriteableApp();
 
         this.reload();
-    }
-
-    initRegistry = () => {
-        if (process.platform !== 'win32') {
-            return Promise.resolve();
+        if (process.platform === 'win32' || process.platform === 'darwin') {
+            this.onLoadRegistry(policyConfigLoader.getPolicyConfig());
         }
-
-        return new Promise<void>((resolve) => {
-            this.registryConfig = new RegistryConfig();
-            this.registryConfig.once(REGISTRY_READ_EVENT, (data) => {
-                this.onLoadRegistry(data);
-                resolve();
-            });
-            this.registryConfig.init();
-        });
-    }
+    };
 
     /**
      * Reload all sources of config data
      *
-     * @param {boolean} synchronize determines whether or not to emit a synchronize event once config has been reloaded
      * @emits {update} emitted once all data has been loaded and merged
-     * @emits {synchronize} emitted when requested by a call to method; used to notify other config instances of changes
      */
     reload = (): void => {
         this.defaultConfigData = copy(defaultPreferences);
@@ -101,7 +72,7 @@ export class Config extends EventEmitter {
         this.regenerateCombinedConfigData();
 
         this.emit('update', this.combinedData);
-    }
+    };
 
     /*********************
      * Setters and Getters
@@ -113,38 +84,43 @@ export class Config extends EventEmitter {
      * @param {string} key name of config property to be saved
      * @param {*} data value to save for provided key
      */
-    set = (key: keyof ConfigType, data: ConfigType[keyof ConfigType]): void => {
+    set = (key: keyof CurrentConfig, data: CurrentConfig[keyof CurrentConfig]): void => {
         log.debug('set');
         this.setMultiple({[key]: data});
-    }
+    };
 
     setConfigPath = (configPath: string) => {
         this.configFilePath = configPath;
-    }
+        this.json = undefined;
+    };
 
     /**
      * Used to save an array of config properties in one go
      *
      * @param {array} properties an array of config properties to save
      */
-    setMultiple = (newData: Partial<ConfigType>) => {
-        log.debug('setMultiple', newData);
+    setMultiple = (newData: Partial<CurrentConfig>) => {
+        log.debug('setMultiple');
 
         if (newData.darkMode && newData.darkMode !== this.darkMode) {
             this.emit('darkModeChange', newData.darkMode);
         }
-        this.localConfigData = Object.assign({}, this.localConfigData, {...newData, teams: this.localConfigData?.teams});
+        this.localConfigData = Object.assign({}, this.localConfigData, {...newData, servers: this.localConfigData?.servers});
         this.regenerateCombinedConfigData();
         this.saveLocalConfigData();
-    }
+    };
 
     setServers = (servers: ConfigServer[], lastActiveServer?: number) => {
-        log.debug('setServers', servers, lastActiveServer);
+        log.debug('setServers');
 
-        this.localConfigData = Object.assign({}, this.localConfigData, {teams: servers, lastActiveTeam: lastActiveServer ?? this.localConfigData?.lastActiveTeam});
+        this.localConfigData = Object.assign({}, this.localConfigData, {
+            servers,
+            lastActiveServer: lastActiveServer ?? this.localConfigData?.lastActiveServer,
+            viewLimit: this.localConfigData?.viewLimit ? Math.max(this.localConfigData.viewLimit, servers.length) : undefined,
+        });
         this.regenerateCombinedConfigData();
         this.saveLocalConfigData();
-    }
+    };
 
     // getters for accessing the various config data inputs
 
@@ -161,7 +137,7 @@ export class Config extends EventEmitter {
         return this.buildConfigData ?? buildConfig;
     }
     get registryData() {
-        return this.registryConfigData;
+        return this.policyConfigData;
     }
 
     // convenience getters
@@ -173,7 +149,7 @@ export class Config extends EventEmitter {
         return this.combinedData?.darkMode ?? defaultPreferences.darkMode;
     }
     get localServers() {
-        return this.localConfigData?.teams ?? defaultPreferences.teams;
+        return this.localConfigData?.servers ?? defaultPreferences.servers;
     }
     get predefinedServers() {
         return this._predefinedServers;
@@ -188,8 +164,8 @@ export class Config extends EventEmitter {
     get enableServerManagement() {
         return this.combinedData?.enableServerManagement ?? buildConfig.enableServerManagement;
     }
-    get enableAutoUpdater() {
-        return this.combinedData?.enableAutoUpdater ?? buildConfig.enableAutoUpdater;
+    get enableUpdateNotifications() {
+        return this.combinedData?.enableUpdateNotifications ?? buildConfig.enableUpdateNotifications;
     }
     get autostart() {
         return this.combinedData?.autostart ?? defaultPreferences.autostart;
@@ -226,11 +202,17 @@ export class Config extends EventEmitter {
     get helpLink() {
         return this.combinedData?.helpLink;
     }
+    get academyLink() {
+        return this.combinedData?.academyLink;
+    }
+    get upgradeLink() {
+        return this.combinedData?.upgradeLink;
+    }
     get minimizeToTray() {
         return this.combinedData?.minimizeToTray;
     }
     get lastActiveServer() {
-        return this.combinedData?.lastActiveTeam;
+        return this.combinedData?.lastActiveServer;
     }
     get alwaysClose() {
         return this.combinedData?.alwaysClose;
@@ -240,7 +222,7 @@ export class Config extends EventEmitter {
     }
 
     get canUpgrade() {
-        return process.env.NODE_ENV === 'test' || (this.canUpgradeValue && this.buildConfigData?.enableAutoUpdater && !(process.platform === 'linux' && !process.env.APPIMAGE) && !(process.platform === 'win32' && this.registryConfigData?.enableAutoUpdater === false));
+        return process.env.NODE_ENV === 'test' || (this.buildConfigData?.enableUpdateNotifications && !(this.policyConfigData && this.policyConfigData?.enableUpdateNotifications === false));
     }
 
     get autoCheckForUpdates() {
@@ -251,21 +233,51 @@ export class Config extends EventEmitter {
         return this.combinedData?.appLanguage;
     }
 
+    get enableMetrics() {
+        return this.combinedData?.enableMetrics ?? true;
+    }
+
+    get enableSentry() {
+        return this.combinedData?.enableSentry ?? true;
+    }
+
+    get enableSessionAttributes() {
+        return this.combinedData?.enableSessionAttributes ?? true;
+    }
+
+    get viewLimit() {
+        return this.combinedData?.viewLimit ?? 15;
+    }
+
+    get themeSyncing() {
+        return this.combinedData?.themeSyncing ?? true;
+    }
+
+    get useNativeTitleBar() {
+        return this.combinedData?.useNativeTitleBar ?? false;
+    }
+
+    getWindowsSystemDarkMode = () => {
+        return !policyConfigLoader.getAppsUseLightTheme();
+    };
+
     /**
      * Gets the servers from registry into the config object and reload
      *
      * @param {object} registryData Server configuration from the registry and if servers can be managed by user
      */
 
-    private onLoadRegistry = (registryData: Partial<RegistryConfigType>): void => {
-        log.debug('loadRegistry', {registryData});
+    private onLoadRegistry = (registryData: Partial<RegistryCurrentConfig>): void => {
+        log.debug('loadRegistry');
 
-        this.registryConfigData = registryData;
-        if (this.registryConfigData.servers) {
-            this._predefinedServers.push(...this.registryConfigData.servers.map((server, index) => getDefaultViewsForConfigServer({...server, order: index})));
+        this.policyConfigData = registryData;
+        if (this.policyConfigData.servers) {
+            this._predefinedServers.push(...this.policyConfigData.servers.map((server, index) => ({...server, order: index, isPredefined: true})));
         }
-        this.reload();
-    }
+
+        this.regenerateCombinedConfigData();
+        this.emit('update', this.combinedData);
+    };
 
     /**
      * Config file loading methods
@@ -278,28 +290,32 @@ export class Config extends EventEmitter {
      * @emits {synchronize} emitted once all data has been saved; used to notify other config instances of changes
      * @emits {error} emitted if saving local config data to file fails
      */
-    private saveLocalConfigData = (): void => {
-        if (!(this.configFilePath && this.localConfigData)) {
+    private saveLocalConfigData = (isRetry = false): void => {
+        if (!(this.json && this.localConfigData)) {
+            return;
+        }
+
+        if (!this.defaultConfigData) {
+            return;
+        }
+
+        if (this.localConfigData.version !== this.defaultConfigData.version) {
+            this.emit('error', new Error('version ' + this.localConfigData.version + ' is not equal to ' + this.defaultConfigData.version));
             return;
         }
 
         log.verbose('Saving config data to file...');
 
-        try {
-            this.writeFile(this.configFilePath, this.localConfigData, (error: NodeJS.ErrnoException | null) => {
-                if (error) {
-                    if (error.code === 'EBUSY') {
-                        this.saveLocalConfigData();
-                    } else {
-                        this.emit('error', error);
-                    }
-                }
-                this.emit('update', this.combinedData);
-            });
-        } catch (error) {
-            this.emit('error', error);
-        }
-    }
+        this.json.setJson(this.localConfigData).then(() => {
+            this.emit('update', this.combinedData);
+        }).catch((error: NodeJS.ErrnoException) => {
+            if (error.code === 'EBUSY' && !isRetry) {
+                this.saveLocalConfigData(true);
+            } else {
+                this.emit('error', error);
+            }
+        });
+    };
 
     /**
      * Loads and returns locally stored config data from the filesystem or returns app defaults if no file is found
@@ -311,10 +327,10 @@ export class Config extends EventEmitter {
 
         let configData: AnyConfig;
         try {
-            configData = JSON.parse(fs.readFileSync(this.configFilePath, 'utf8'));
+            this.json = new JsonFileManager<CurrentConfig>(this.configFilePath);
 
             // validate based on config file version
-            configData = Validator.validateConfigData(configData);
+            configData = Validator.validateConfigData(this.json.json);
 
             if (!configData) {
                 throw new Error('Provided configuration file does not validate, using defaults instead.');
@@ -323,18 +339,20 @@ export class Config extends EventEmitter {
             log.warn('Failed to load configuration file from the filesystem. Using defaults.');
             configData = copy(this.defaultConfigData);
 
-            this.writeFile(this.configFilePath, configData);
+            this.json?.setJson(configData as CurrentConfig).catch((error) => {
+                this.emit('error', error);
+            });
         }
         return configData;
-    }
+    };
 
     /**
      * Determines if locally stored data needs to be updated and upgrades as needed
      *
      * @param {*} data locally stored data
      */
-    private checkForConfigUpdates = (data: AnyConfig) => {
-        if (!this.configFilePath) {
+    private checkForConfigUpdates = (data: AnyConfig): CurrentConfig => {
+        if (!this.json) {
             throw new Error('Config not initialized');
         }
 
@@ -343,12 +361,16 @@ export class Config extends EventEmitter {
             try {
                 if (configData.version !== this.defaultConfigData.version) {
                     configData = upgradeConfigData(configData);
-                    this.writeFile(this.configFilePath, configData);
+                    this.json.setJson(configData as CurrentConfig).catch((error) => {
+                        this.emit('error', error);
+                    });
                     log.info(`Configuration updated to version ${this.defaultConfigData.version} successfully.`);
                 }
                 const didMigrate = migrateConfigItems(configData);
                 if (didMigrate) {
-                    this.writeFile(this.configFilePath, configData);
+                    this.json.setJson(configData as CurrentConfig).catch((error) => {
+                        this.emit('error', error);
+                    });
                     log.info('Migrating config items successfully.');
                 }
             } catch (error) {
@@ -356,91 +378,34 @@ export class Config extends EventEmitter {
             }
         }
 
-        return configData as ConfigType;
-    }
+        return configData as CurrentConfig;
+    };
 
     /**
-     * Properly combines all sources of data into a single, manageable set of all config data
+     * Combines all config sources into one. Order (later overrides earlier):
+     * default < local < build < registry (GPO) < mdm (CFPrefs).
+     * Policy keys are loaded by policyConfigLoader.
      */
     private regenerateCombinedConfigData = () => {
         if (!this.appName) {
             throw new Error('Config not initialized, cannot regenerate');
         }
 
-        // combine all config data in the correct order
         this.combinedData = Object.assign({},
             this.defaultConfigData,
             this.localConfigData,
             this.buildConfigData,
-            this.registryConfigData,
-            {useNativeWindow: this.useNativeWindow},
+            this.policyConfigData,
         );
 
         // We don't want to include the servers in the combined config, they should only be accesible via the ServerManager
-        delete (this.combinedData as any).teams;
         delete (this.combinedData as any).servers;
         delete (this.combinedData as any).defaultServers;
 
         if (this.combinedData) {
             this.combinedData.appName = this.appName;
         }
-    }
-
-    // helper functions
-    private writeFile = (filePath: string, configData: Partial<ConfigType>, callback?: fs.NoParamCallback) => {
-        if (!this.defaultConfigData) {
-            return;
-        }
-
-        if (configData.version !== this.defaultConfigData.version) {
-            throw new Error('version ' + configData.version + ' is not equal to ' + this.defaultConfigData.version);
-        }
-        const json = JSON.stringify(configData, null, '  ');
-
-        if (callback) {
-            fs.writeFile(filePath, json, 'utf8', callback);
-        } else {
-            const dir = path.dirname(filePath);
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir);
-            }
-
-            fs.writeFileSync(filePath, json, 'utf8');
-        }
-    }
-
-    private checkWriteableApp = () => {
-        if (!this.appPath) {
-            throw new Error('Config not initialized, cannot regenerate');
-        }
-
-        if (process.platform === 'win32') {
-            try {
-                fs.accessSync(path.join(path.dirname(this.appPath), '../../'), fs.constants.W_OK);
-
-                // check to make sure that app-update.yml exists
-                if (!fs.existsSync(path.join(process.resourcesPath, 'app-update.yml'))) {
-                    log.warn('app-update.yml does not exist, disabling auto-updates');
-                    return false;
-                }
-            } catch (error) {
-                log.info(`${this.appPath}: ${error}`);
-                log.warn('autoupgrade disabled');
-                return false;
-            }
-
-            // eslint-disable-next-line no-undef
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            return __CAN_UPGRADE__; // prevent showing the option if the path is not writeable, like in a managed environment.
-        }
-
-        // temporarily disabling auto updater for macOS due to security issues
-        // eslint-disable-next-line no-undef
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        return process.platform !== 'darwin' && __CAN_UPGRADE__;
-    }
+    };
 }
 
 const config = new Config();

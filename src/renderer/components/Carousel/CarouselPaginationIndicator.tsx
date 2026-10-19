@@ -1,17 +1,16 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React, {useCallback} from 'react';
 import classNames from 'classnames';
+import React, {useCallback} from 'react';
 
 import 'renderer/css/components/Button.scss';
-import 'renderer/css/components/CarouselPaginationIndicator.scss';
+import './CarouselPaginationIndicator.scss';
 
 type CarouselPaginationIndicatorProps = {
     pages: number;
     activePage: number;
     disabled?: boolean;
-    darkMode?: boolean;
     onClick?: (pageIndex: number) => void;
 };
 
@@ -19,7 +18,6 @@ function CarouselPaginationIndicator({
     pages,
     activePage,
     disabled,
-    darkMode,
     onClick = () => null,
 }: CarouselPaginationIndicatorProps) {
     const handleOnClick = useCallback((pageIndex: number) => () => {
@@ -45,7 +43,6 @@ function CarouselPaginationIndicator({
                     className={classNames(
                         'indicatorDot',
                         {
-                            'indicatorDot-inverted': darkMode,
                             active: activePage === pageIndex,
                             disabled,
                         },
@@ -59,7 +56,7 @@ function CarouselPaginationIndicator({
         }
 
         return indicators;
-    }, [pages, activePage, darkMode, handleOnClick]);
+    }, [pages, activePage, handleOnClick]);
 
     return (
         <div

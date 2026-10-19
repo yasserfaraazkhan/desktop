@@ -4,14 +4,13 @@
 import React, {useEffect, useState} from 'react';
 import ReactDOM from 'react-dom';
 
-import {UniqueServer} from 'types/config';
-
 import IntlProvider from 'renderer/intl_provider';
+import setupDarkMode from 'renderer/modals/darkMode';
 
-import WelcomeScreen from '../../components/WelcomeScreen';
+import type {UniqueServer} from 'types/config';
+
 import ConfigureServer from '../../components/ConfigureServer';
-
-import 'bootstrap/dist/css/bootstrap.min.css';
+import WelcomeScreen from '../../components/WelcomeScreen';
 
 const MOBILE_SCREEN_WIDTH = 1200;
 
@@ -19,8 +18,10 @@ const onConnect = (data: UniqueServer) => {
     window.desktop.modals.finishModal(data);
 };
 
+setupDarkMode();
+
 const WelcomeScreenModalWrapper = () => {
-    const [darkMode, setDarkMode] = useState(false);
+    const [data, setData] = useState<{prefillURL?: string}>();
     const [getStarted, setGetStarted] = useState(false);
     const [mobileView, setMobileView] = useState(false);
 
@@ -29,13 +30,13 @@ const WelcomeScreenModalWrapper = () => {
     };
 
     useEffect(() => {
-        window.desktop.getDarkMode().then((result) => {
-            setDarkMode(result);
-        });
-
-        window.desktop.onDarkModeChange((result) => {
-            setDarkMode(result);
-        });
+        window.desktop.modals.getModalInfo<{prefillURL?: string}>().
+            then((data) => {
+                setData(data);
+                if (data.prefillURL) {
+                    setGetStarted(true);
+                }
+            });
 
         handleWindowResize();
         window.addEventListener('resize', handleWindowResize);
@@ -54,12 +55,11 @@ const WelcomeScreenModalWrapper = () => {
             {getStarted ? (
                 <ConfigureServer
                     mobileView={mobileView}
-                    darkMode={darkMode}
                     onConnect={onConnect}
+                    prefillURL={data?.prefillURL}
                 />
             ) : (
                 <WelcomeScreen
-                    darkMode={darkMode}
                     onGetStarted={onGetStarted}
                 />
             )}

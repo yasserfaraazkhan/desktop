@@ -1,13 +1,11 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import {
+import type {
     AuthInfo,
     AuthenticationResponseDetails,
     Certificate,
 } from 'electron/common';
-
-import {PermissionType} from './trustedOrigin';
 
 export type CertificateModalInfo = {
     url: string;
@@ -19,7 +17,19 @@ export type LoginModalInfo = {
     authInfo: AuthInfo;
 }
 
-export type PermissionModalInfo = {
-    url: string;
-    permission: PermissionType;
+export type MessageModalInfo = {
+    type?: 'none' | 'info' | 'error' | 'question' | 'warning';
+    title?: string;
+    message: string;
+    detail?: string;
+    buttons?: string[];
+    defaultId?: number;
+    cancelId?: number;
+    checkboxLabel?: string;
+    checkboxChecked?: boolean;
+}
+
+export type MessageModalResult = {
+    response: number;
+    checkboxChecked: boolean;
 }

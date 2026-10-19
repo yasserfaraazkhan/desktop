@@ -2,24 +2,46 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import path from 'path';
-import fs from 'fs';
-
 import {exec as execOriginal} from 'child_process';
-
+import fs from 'fs';
+import path from 'path';
 import {promisify} from 'util';
 const exec = promisify(execOriginal);
 
-import {app, BrowserWindow} from 'electron';
+import type {BrowserWindow} from 'electron';
+import {app} from 'electron';
 
-import {Args} from 'types/args';
+import {MAILTO_PREFIX} from 'common/constants';
+import {TAB_BAR_HEIGHT} from 'common/utils/constants';
 
-import {BACK_BAR_HEIGHT, customLoginRegexPaths, PRODUCTION, TAB_BAR_HEIGHT} from 'common/utils/constants';
-import Utils from 'common/utils/util';
-import {isAdminUrl, isPluginUrl, isTeamUrl, isUrlType, parseURL} from 'common/utils/url';
+import type {Args} from 'types/args';
+
+export function getEmailAddressFromMailtoLink(link: string): string | undefined {
+    if (!link.toLowerCase().startsWith(MAILTO_PREFIX)) {
+        return undefined;
+    }
+    const email = link.slice(MAILTO_PREFIX.length).split('?')[0];
+    return email.replace(/[\r\n\t\0]/g, '');
+}
 
 export function isInsideRectangle(container: Electron.Rectangle, rect: Electron.Rectangle) {
-    return container.x <= rect.x && container.y <= rect.y && container.width >= rect.width && container.height >= rect.height;
+    if (container.x > rect.x) {
+        return false;
+    }
+
+    if (container.x + container.width < rect.x + rect.width) {
+        return false;
+    }
+
+    if (container.y > rect.y) {
+        return false;
+    }
+
+    if (container.y + container.height < rect.y + rect.height) {
+        return false;
+    }
+
+    return true;
 }
 
 export function shouldBeHiddenOnStartup(parsedArgv: Args) {
@@ -34,77 +56,33 @@ export function shouldBeHiddenOnStartup(parsedArgv: Args) {
     return false;
 }
 
-export function getWindowBoundaries(win: BrowserWindow, hasBackBar = false) {
+export function getWindowBoundaries(win: BrowserWindow) {
     const {width, height} = win.getContentBounds();
-    return getAdjustedWindowBoundaries(width, height, hasBackBar);
+    return getAdjustedWindowBoundaries(width, height);
 }
 
-export function getAdjustedWindowBoundaries(width: number, height: number, hasBackBar = false) {
+export function getAdjustedWindowBoundaries(width: number, height: number) {
     return {
         x: 0,
-        y: TAB_BAR_HEIGHT + (hasBackBar ? BACK_BAR_HEIGHT : 0),
+        y: TAB_BAR_HEIGHT,
         width,
-        height: height - TAB_BAR_HEIGHT - (hasBackBar ? BACK_BAR_HEIGHT : 0),
+        height: height - TAB_BAR_HEIGHT,
     };
 }
 
-export function shouldHaveBackBar(serverUrl: URL, inputURL: URL) {
-    if (isUrlType('login', serverUrl, inputURL)) {
-        const serverURL = parseURL(serverUrl);
-        const subpath = serverURL ? serverURL.pathname : '';
-        const parsedURL = parseURL(inputURL);
-        if (!parsedURL) {
-            return false;
-        }
-        const urlPath = parsedURL.pathname;
-        const replacement = subpath.endsWith('/') ? '/' : '';
-        const replacedPath = urlPath.replace(subpath, replacement);
-        for (const regexPath of customLoginRegexPaths) {
-            if (replacedPath.match(regexPath)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    return !isTeamUrl(serverUrl, inputURL) && !isAdminUrl(serverUrl, inputURL) && !isPluginUrl(serverUrl, inputURL);
-}
-
-export function getLocalURLString(urlPath: string, query?: Map<string, string>, isMain?: boolean) {
-    let pathname;
-    const processPath = isMain ? '' : '/renderer';
-    const mode = Utils.runMode();
-    const protocol = 'file';
-    const hostname = '';
-    const port = '';
-    if (mode === PRODUCTION) {
-        pathname = path.join(app.getAppPath(), `${processPath}/${urlPath}`);
-    } else {
-        pathname = path.resolve(__dirname, `../../dist/${processPath}/${urlPath}`); // TODO: find a better way to work with webpack on this
-    }
-    const localUrl = new URL(`${protocol}://${hostname}${port}`);
-    localUrl.pathname = pathname;
-    if (query) {
-        query.forEach((value: string, key: string) => {
-            localUrl.searchParams.append(encodeURIComponent(key), encodeURIComponent(value));
-        });
-    }
-
-    return localUrl.href;
-}
-
 export function getLocalPreload(file: string) {
-    if (Utils.runMode() === PRODUCTION) {
-        return path.join(app.getAppPath(), `${file}`);
-    }
-    return path.resolve(__dirname, `../../dist/${file}`);
+    return path.join(app.getAppPath(), file);
 }
 
-export function composeUserAgent() {
+export function composeUserAgent(browserMode?: boolean) {
     const baseUserAgent = app.userAgentFallback.split(' ');
 
     // filter out the Mattermost tag that gets added earlier on
     const filteredUserAgent = baseUserAgent.filter((ua) => !ua.startsWith('Mattermost'));
+
+    if (browserMode) {
+        return filteredUserAgent.join(' ');
+    }
 
     return `${filteredUserAgent.join(' ')} Mattermost/${app.getVersion()}`;
 }
@@ -160,4 +138,42 @@ export function openScreensharePermissionsSettingsMacOS() {
     }
     return exec('open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"',
         {timeout: 1000});
+}
+
+export function isKDE() {
+    return (process.env.XDG_CURRENT_DESKTOP ?? '').toUpperCase() === 'KDE' ||
+    (process.env.DESKTOP_SESSION ?? '').toLowerCase() === 'plasma' ||
+    (process.env.KDE_FULL_SESSION ?? '').toLowerCase() === 'true';
+}
+
+export function isLightColor(color: string) {
+    const hexColor = Number('0x' + color.slice(1));
+
+    const r = hexColor >> 16;
+    const g = (hexColor >> 8) & 255;
+    const b = hexColor & 255;
+
+    // HSP equation from http://alienryderflex.com/hsp.html
+    const hsp = Math.sqrt(
+        (0.299 * (r * r)) +
+        (0.587 * (g * g)) +
+        (0.114 * (b * b)),
+    );
+
+    // Using the HSP value, determine whether the color is light or dark
+    // > 127.5 is 'light', <= 127.5 is 'dark'
+    return hsp > 127.5;
+}
+
+export function isRoutableAddress(family: string, address: string): boolean {
+    return !isLinkLocalAddress(family, address) && address !== '0.0.0.0';
+}
+
+function isLinkLocalAddress(family: string, address: string): boolean {
+    if (family === 'IPv4') {
+        return address.startsWith('169.254.');
+    }
+    const ip = address.split('%')[0].toLowerCase();
+    const firstHextet = parseInt(ip.split(':')[0], 16);
+    return firstHextet >= 0xfe80 && firstHextet <= 0xfebf;
 }

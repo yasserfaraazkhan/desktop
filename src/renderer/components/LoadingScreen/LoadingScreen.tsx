@@ -1,18 +1,18 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import React from 'react';
 import classNames from 'classnames';
+import React from 'react';
+
+import BackgroundImage from 'renderer/components/Images/background';
+import LoadingAnimation from 'renderer/components/LoadingAnimation';
 
 import useTransitionEnd from '../../hooks/useTransitionEnd';
 
-import LoadingAnimation from '../LoadingAnimation';
-
-import LoadingBackground from './LoadingBackground';
+import './LoadingScreen.scss';
 
 type Props = {
     loading?: boolean;
-    darkMode?: boolean;
     onFadeOutComplete?: () => void;
 };
 
@@ -22,7 +22,7 @@ type Props = {
  * @param {boolean} darkMode - Prop that indicates if dark mode is enabled
  * @param {() => void} onFadeOutComplete - Function to call when the loading animation is completely finished
  */
-function LoadingScreen({loading = false, darkMode = false, onFadeOutComplete = () => null}: Props) {
+function LoadingScreen({loading = false, onFadeOutComplete = () => null}: Props) {
     const loadingScreenRef = React.useRef(null);
 
     const [loadingIsComplete, setLoadingIsComplete] = React.useState(true);
@@ -61,14 +61,12 @@ function LoadingScreen({loading = false, darkMode = false, onFadeOutComplete = (
         <div
             ref={loadingScreenRef}
             className={classNames('LoadingScreen', {
-                'LoadingScreen--darkMode': darkMode,
                 'LoadingScreen--loaded': loadingIsComplete && loadAnimationIsComplete,
             })}
         >
-            <LoadingBackground/>
+            <BackgroundImage/>
             <LoadingAnimation
                 loading={loading}
-                darkMode={darkMode}
                 onLoadAnimationComplete={handleLoadAnimationComplete}
             />
         </div>

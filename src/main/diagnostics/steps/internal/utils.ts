@@ -4,11 +4,13 @@ import fs from 'fs';
 import https from 'https';
 import readline from 'readline';
 
-import {BrowserWindow, Rectangle, WebContents} from 'electron';
-import log, {ElectronLog, LogLevel} from 'electron-log';
-import {AddDurationToFnReturnObject, LogFileLineData, LogLevelAmounts, WindowStatus} from 'types/diagnostics';
+import type {BrowserWindow, Rectangle, WebContents} from 'electron';
+import type {MainLogger, LogLevel} from 'electron-log';
+import log from 'electron-log';
 
 import {IS_ONLINE_ENDPOINT, LOGS_MAX_STRING_LENGTH, REGEX_LOG_FILE_LINE} from 'common/constants';
+
+import type {AddDurationToFnReturnObject, LogFileLineData, LogLevelAmounts, WindowStatus} from 'types/diagnostics';
 
 export function dateTimeInFilename(date?: Date) {
     const now = date ?? new Date();
@@ -58,7 +60,7 @@ export function truncateString(str: string, maxLength = LOGS_MAX_STRING_LENGTH):
     return str;
 }
 
-export async function isOnline(logger: ElectronLog = log, url = IS_ONLINE_ENDPOINT): Promise<boolean> {
+export async function isOnline(logger: MainLogger = log, url = IS_ONLINE_ENDPOINT): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
         https.get(url, (resp) => {
             let data = '';
@@ -72,10 +74,14 @@ export async function isOnline(logger: ElectronLog = log, url = IS_ONLINE_ENDPOI
             resp.on('end', () => {
                 logger.debug('resp.on.end', {data, url});
                 if (data.length) {
-                    const respBody = JSON.parse(data);
-                    if (respBody.status === 'OK') {
-                        resolve(true);
-                        return;
+                    try {
+                        const respBody = JSON.parse(data);
+                        if (respBody.status === 'OK') {
+                            resolve(true);
+                            return;
+                        }
+                    } catch (e) {
+                        logger.error('Cannot parse response');
                     }
                 }
                 resolve(false);
@@ -103,7 +109,7 @@ export function browserWindowVisibilityStatus(name: string, bWindow?: BrowserWin
     const destroyed = bWindow.isDestroyed();
     const visible = bWindow.isVisible();
     const enabled = bWindow.isEnabled();
-    const browserViewsBounds = bWindow.getBrowserViews()?.map((view) => view.getBounds());
+    const webContentsViewsBounds = bWindow.contentView.children.map((view) => view.getBounds());
 
     status.push({
         name: 'windowExists',
@@ -135,9 +141,9 @@ export function browserWindowVisibilityStatus(name: string, bWindow?: BrowserWin
         ok: enabled,
     });
     status.push({
-        name: 'browserViewsBounds',
-        ok: browserViewsBounds.every((bounds) => boundsOk(bounds)),
-        data: browserViewsBounds,
+        name: 'webContentsViewsBounds',
+        ok: webContentsViewsBounds.every((bounds) => boundsOk(bounds)),
+        data: webContentsViewsBounds,
     });
 
     return status;
@@ -177,11 +183,44 @@ function parseLogFileLine(line: string, lineMatchPattern: RegExp): LogFileLineDa
     };
 }
 
-/**
- * The current setup of `electron-log` rotates the file when it reaches ~1mb. It's safe to assume that the file will not be large enough to cause
- * issues reading it in the same process. If this read function ever causes performance issues we should either execute it in a child process or
- * read up to X amount of lines (eg 10.000)
- */
+export async function countLogLevels(path: fs.PathLike, lineMatchPattern = REGEX_LOG_FILE_LINE): Promise<{logLevelAmounts: LogLevelAmounts; linesCount: number}> {
+    const logLevelAmounts: LogLevelAmounts = {
+        silly: 0,
+        debug: 0,
+        verbose: 0,
+        info: 0,
+        warn: 0,
+        error: 0,
+    };
+    let linesCount = 0;
+
+    if (!path) {
+        return {logLevelAmounts, linesCount};
+    }
+
+    const fileStream = fs.createReadStream(path);
+    const rl = readline.createInterface({input: fileStream, crlfDelay: Infinity});
+    const pattern = new RegExp(lineMatchPattern, 'gi');
+
+    try {
+        for await (const line of rl) {
+            if (pattern.test(line)) {
+                linesCount++;
+                const lineData = parseLogFileLine(line, lineMatchPattern);
+                if (lineData.logLevel) {
+                    logLevelAmounts[lineData.logLevel]++;
+                }
+            }
+            pattern.lastIndex = 0;
+        }
+    } finally {
+        rl.close();
+        fileStream.destroy();
+    }
+
+    return {logLevelAmounts, linesCount};
+}
+
 export async function readFileLineByLine(path: fs.PathLike, lineMatchPattern = REGEX_LOG_FILE_LINE): Promise<{lines: LogFileLineData[]; logLevelAmounts: LogLevelAmounts}> {
     const logLevelAmounts = {
         silly: 0,

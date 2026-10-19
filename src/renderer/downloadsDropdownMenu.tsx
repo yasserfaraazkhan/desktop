@@ -1,24 +1,25 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
+import classNames from 'classnames';
 import React, {useCallback, useEffect, useState} from 'react';
 import ReactDOM from 'react-dom';
-import classNames from 'classnames';
 import {FormattedMessage} from 'react-intl';
 
-import {DownloadedItem} from 'types/downloads';
+import type {DownloadedItem} from 'types/downloads';
 
 import IntlProvider from './intl_provider';
+import setupDarkMode from './modals/darkMode';
 
 import './css/downloadsDropdownMenu.scss';
 
+setupDarkMode();
+
 const DownloadsDropdownMenu = () => {
     const [item, setItem] = useState<DownloadedItem | null>(null);
-    const [darkMode, setDarkMode] = useState(false);
 
-    const handleUpdate = (item: DownloadedItem, darkMode: boolean) => {
+    const handleUpdate = (item: DownloadedItem) => {
         setItem(item);
-        setDarkMode(darkMode);
     };
 
     useEffect(() => {
@@ -100,55 +101,96 @@ const DownloadsDropdownMenu = () => {
         window.desktop.downloadsDropdownMenu.cancelDownload(item);
     }, [item]);
 
+    const viewChangelog = useCallback(() => {
+        if (!item) {
+            return;
+        }
+        if (item?.type !== 'update') {
+            return;
+        }
+        window.desktop.openChangelogLink();
+        window.desktop.closeDownloadsDropdownMenu();
+    }, [item]);
+
+    const skipVersion = useCallback(() => {
+        if (!item) {
+            return;
+        }
+        if (item?.type !== 'update') {
+            return;
+        }
+        window.desktop.skipVersion();
+        window.desktop.closeDownloadsDropdownMenu();
+    }, [item]);
+
+    const isUpdate = item?.type === 'update';
+
     return (
         <IntlProvider>
             <div
                 onClick={preventPropagation}
-                className={classNames('DownloadsDropdownMenu', {
-                    darkMode,
-                })}
+                className='DownloadsDropdownMenu'
             >
-                <div
-                    className={classNames('DownloadsDropdownMenu__MenuItem', {
-                        disabled: item?.type === 'update',
-                    })}
-                    onClick={openFile}
-                >
-                    <FormattedMessage
-                        id='renderer.downloadsDropdownMenu.Open'
-                        defaultMessage='Open'
-                    />
-                </div>
-                <div
-                    className={classNames('DownloadsDropdownMenu__MenuItem', {
-                        disabled: item?.type === 'update',
-                    })}
-                    onClick={showInFolder}
-                >
-                    {getOSFileManager()}
-                </div>
-                <div
-                    className={classNames('DownloadsDropdownMenu__MenuItem', {
-                        disabled: item?.type === 'update',
-                    })}
-                    onClick={clearFile}
-                >
-                    <FormattedMessage
-                        id='renderer.downloadsDropdownMenu.Clear'
-                        defaultMessage='Clear'
-                    />
-                </div>
-                <div
-                    className={classNames('DownloadsDropdownMenu__MenuItem', {
-                        disabled: item?.state !== 'progressing',
-                    })}
-                    onClick={cancelDownload}
-                >
-                    <FormattedMessage
-                        id='renderer.downloadsDropdownMenu.CancelDownload'
-                        defaultMessage='Cancel Download'
-                    />
-                </div>
+                {isUpdate ? (
+                    <>
+                        <div
+                            className='DownloadsDropdownMenu__MenuItem'
+                            onClick={viewChangelog}
+                        >
+                            <FormattedMessage
+                                id='renderer.downloadsDropdown.Update.ViewChangelog'
+                                defaultMessage='View changelog'
+                            />
+                        </div>
+                        <div
+                            className='DownloadsDropdownMenu__MenuItem'
+                            onClick={skipVersion}
+                        >
+                            <FormattedMessage
+                                id='renderer.downloadsDropdown.Update.SkipThisVersion'
+                                defaultMessage='Skip this version'
+                            />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div
+                            className='DownloadsDropdownMenu__MenuItem'
+                            onClick={openFile}
+                        >
+                            <FormattedMessage
+                                id='renderer.downloadsDropdownMenu.Open'
+                                defaultMessage='Open'
+                            />
+                        </div>
+                        <div
+                            className='DownloadsDropdownMenu__MenuItem'
+                            onClick={showInFolder}
+                        >
+                            {getOSFileManager()}
+                        </div>
+                        <div
+                            className='DownloadsDropdownMenu__MenuItem'
+                            onClick={clearFile}
+                        >
+                            <FormattedMessage
+                                id='renderer.downloadsDropdownMenu.Clear'
+                                defaultMessage='Clear'
+                            />
+                        </div>
+                        <div
+                            className={classNames('DownloadsDropdownMenu__MenuItem', {
+                                disabled: item?.state !== 'progressing',
+                            })}
+                            onClick={cancelDownload}
+                        >
+                            <FormattedMessage
+                                id='renderer.downloadsDropdownMenu.CancelDownload'
+                                defaultMessage='Cancel Download'
+                            />
+                        </div>
+                    </>
+                )}
             </div>
         </IntlProvider>
     );

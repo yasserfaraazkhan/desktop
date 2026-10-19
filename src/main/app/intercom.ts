@@ -1,21 +1,22 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import {app, IpcMainEvent, IpcMainInvokeEvent, Menu} from 'electron';
+import type {IpcMainEvent, IpcMainInvokeEvent} from 'electron';
+import {app, BrowserWindow, Menu} from 'electron';
 
-import {UniqueServer} from 'types/config';
-import {MentionData} from 'types/notification';
-
-import ServerViewState from 'app/serverViewState';
-
+import MainWindow from 'app/mainWindow/mainWindow';
+import ModalManager from 'app/mainWindow/modals/modalManager';
+import ServerViewState from 'app/serverHub';
+import {APP_MENU_WILL_CLOSE} from 'common/communication';
+import {ModalConstants} from 'common/constants';
 import {Logger} from 'common/log';
 import ServerManager from 'common/servers/serverManager';
 import {ping} from 'common/utils/requests';
+import {parseURL} from 'common/utils/url';
+import NotificationManager from 'main/notifications';
+import {getLocalPreload} from 'main/utils';
 
-import {displayMention} from 'main/notifications';
-import {getLocalPreload, getLocalURLString} from 'main/utils';
-import ModalManager from 'main/views/modalManager';
-import MainWindow from 'main/windows/mainWindow';
+import type {UniqueServer} from 'types/config';
 
 import {handleAppBeforeQuit} from './app';
 
@@ -39,16 +40,17 @@ function handleShowOnboardingScreens(showWelcomeScreen: boolean, showNewServerMo
     log.debug('handleShowOnboardingScreens', {showWelcomeScreen, showNewServerModal, mainWindowIsVisible});
 
     if (showWelcomeScreen) {
-        if (ModalManager.isModalDisplayed()) {
+        const welcomeScreen = ModalManager.modalQueue.find((modal) => modal.key === 'welcomeScreen');
+        if (welcomeScreen) {
             return;
         }
 
         handleWelcomeScreenModal();
 
         if (process.env.NODE_ENV === 'test') {
-            const welcomeScreen = ModalManager.modalQueue.find((modal) => modal.key === 'welcomeScreen');
-            if (welcomeScreen?.view.webContents.isLoading()) {
-                welcomeScreen?.view.webContents.once('did-finish-load', () => {
+            const welcomeScreenTest = ModalManager.modalQueue.find((modal) => modal.key === 'welcomeScreen');
+            if (welcomeScreenTest?.view.webContents.isLoading()) {
+                welcomeScreenTest?.view.webContents.once('did-finish-load', () => {
                     app.emit('e2e-app-loaded');
                 });
             } else {
@@ -76,7 +78,6 @@ export function handleMainWindowIsShown() {
     */
 
     const mainWindow = MainWindow.get();
-
     log.debug('handleMainWindowIsShown', {showWelcomeScreen, showNewServerModal, mainWindow: Boolean(mainWindow)});
     if (mainWindow?.isVisible()) {
         handleShowOnboardingScreens(showWelcomeScreen(), showNewServerModal(), true);
@@ -87,26 +88,34 @@ export function handleMainWindowIsShown() {
     }
 }
 
-export function handleWelcomeScreenModal() {
+export function handleWelcomeScreenModal(prefillURL?: string) {
     log.debug('handleWelcomeScreenModal');
 
-    const html = getLocalURLString('welcomeScreen.html');
+    const html = 'mattermost-desktop://renderer/welcomeScreen.html';
 
-    const preload = getLocalPreload('desktopAPI.js');
+    const preload = getLocalPreload('internalAPI.js');
 
     const mainWindow = MainWindow.get();
     if (!mainWindow) {
         return;
     }
-    const modalPromise = ModalManager.addModal<null, UniqueServer>('welcomeScreen', html, preload, null, mainWindow, !ServerManager.hasServers());
+    const modalPromise = ModalManager.addModal<{prefillURL?: string}, UniqueServer>(ModalConstants.WELCOME_SCREEN_MODAL, html, preload, {prefillURL}, mainWindow, !ServerManager.hasServers());
     if (modalPromise) {
-        modalPromise.then((data) => {
-            const newServer = ServerManager.addServer(data);
-            ServerViewState.switchServer(newServer.id, true);
+        modalPromise.then(async (data) => {
+            let initialLoadURL;
+            if (prefillURL) {
+                const parsedServerURL = parseURL(data.url);
+                if (parsedServerURL) {
+                    initialLoadURL = parseURL(`${parsedServerURL.origin}${prefillURL.substring(prefillURL.indexOf('/'))}`);
+                }
+            }
+
+            ServerManager.addServer(data, initialLoadURL);
         }).catch((e) => {
             // e is undefined for user cancellation
             if (e) {
                 log.error(`there was an error in the welcome screen modal: ${e}`);
+                log.error(e);
             }
         });
     } else {
@@ -114,12 +123,12 @@ export function handleWelcomeScreenModal() {
     }
 }
 
-export function handleMentionNotification(event: IpcMainEvent, title: string, body: string, channel: {id: string}, teamId: string, url: string, silent: boolean, data: MentionData) {
-    log.debug('handleMentionNotification', {title, body, channel, teamId, url, silent, data});
-    displayMention(title, body, channel, teamId, url, silent, event.sender, data);
+export function handleMentionNotification(event: IpcMainInvokeEvent, title: string, body: string, channelId: string, teamId: string, url: string, silent: boolean, soundName: string) {
+    log.debug('handleMentionNotification', {silent, soundName});
+    return NotificationManager.displayMention(title, body, channelId, teamId, url, silent, event.sender, soundName);
 }
 
-export function handleOpenAppMenu() {
+export function handleOpenAppMenu(event: IpcMainEvent) {
     log.debug('handleOpenAppMenu');
 
     const windowMenu = Menu.getApplicationMenu();
@@ -127,8 +136,17 @@ export function handleOpenAppMenu() {
         log.error('No application menu found');
         return;
     }
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) {
+        log.error('window not found');
+        return;
+    }
+    windowMenu.once('menu-will-close', () => {
+        window.focus();
+        window.webContents.send(APP_MENU_WILL_CLOSE);
+    });
     windowMenu.popup({
-        window: MainWindow.get(),
+        window,
         x: 18,
         y: 18,
     });
@@ -146,4 +164,34 @@ export function handlePingDomain(event: IpcMainInvokeEvent, url: string): Promis
         }
         throw new Error('Could not find server ' + url);
     });
+}
+
+export function handleToggleSecureInput(event: IpcMainEvent, secureInput: boolean) {
+    if (process.platform !== 'darwin') {
+        return;
+    }
+
+    // Don't allow this to turn on if the main window isn't focused
+    if (secureInput && !MainWindow.get()?.isFocused()) {
+        return;
+    }
+
+    // Enforce macOS to restrict processes from reading the keyboard input when in a password field
+    log.debug('handleToggleSecureInput', {secureInput});
+    app.setSecureKeyboardEntryEnabled(secureInput);
+}
+
+export function handleShowSettingsModal() {
+    const mainWindow = MainWindow.get();
+    if (!mainWindow) {
+        return;
+    }
+
+    ModalManager.addPriorityModal(
+        ModalConstants.SETTINGS_MODAL,
+        'mattermost-desktop://renderer/settings.html',
+        getLocalPreload('internalAPI.js'),
+        null,
+        mainWindow,
+    );
 }

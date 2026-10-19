@@ -1,12 +1,11 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
+export const GET_APP_INFO = 'get-app-info';
+
 export const SWITCH_SERVER = 'switch-server';
 export const SWITCH_TAB = 'switch-tab';
-export const CLOSE_VIEW = 'close-view';
-export const OPEN_VIEW = 'open-view';
 export const SET_ACTIVE_VIEW = 'set-active-view';
-export const FOCUS_BROWSERVIEW = 'focus-browserview';
 export const HISTORY = 'history';
 
 export const QUIT = 'quit';
@@ -17,7 +16,7 @@ export const GET_LOCAL_CONFIGURATION = 'get-local-configuration';
 export const RELOAD_CONFIGURATION = 'reload-config';
 export const EMIT_CONFIGURATION = 'emit-configuration';
 
-export const DARK_MODE_CHANGE = 'dark_mode_change';
+export const DARK_MODE_CHANGE = 'dark-mode-change';
 export const GET_DARK_MODE = 'get-dark-mode';
 export const USER_ACTIVITY_UPDATE = 'user-activity-update';
 export const UPDATE_SHORTCUT_MENU = 'update-shortcut-menu';
@@ -28,6 +27,8 @@ export const APP_MENU_WILL_CLOSE = 'app-menu-will-close';
 export const LOAD_RETRY = 'load_retry';
 export const LOAD_SUCCESS = 'load_success';
 export const LOAD_FAILED = 'load_fail';
+export const LOAD_INCOMPATIBLE_SERVER = 'load_incompatible_server';
+export const RELOAD_VIEW = 'reload_view';
 
 export const MAXIMIZE_CHANGE = 'maximized_change';
 
@@ -43,10 +44,7 @@ export const MODAL_RESULT = 'modal-result';
 export const MODAL_OPEN = 'modal-open';
 export const MODAL_CLOSE = 'modal-close';
 export const NOTIFY_MENTION = 'notify_mention';
-export const WINDOW_CLOSE = 'window_close';
-export const WINDOW_MINIMIZE = 'window_minimize';
-export const WINDOW_MAXIMIZE = 'window_maximize';
-export const WINDOW_RESTORE = 'window_restore';
+export const EXIT_FULLSCREEN = 'exit-fullscreen';
 export const GET_FULL_SCREEN_STATUS = 'get-full-screen-status';
 
 export const UPDATE_TARGET_URL = 'update_target_url';
@@ -56,14 +54,11 @@ export const PLAY_SOUND = 'play_sound';
 export const GET_DOWNLOAD_LOCATION = 'get_download_location';
 
 export const UPDATE_MENTIONS = 'update_mentions';
-export const IS_UNREAD = 'is_unread';
-export const UNREAD_RESULT = 'unread_result';
+export const UPDATE_MENTIONS_FOR_SERVER = 'update_mentions_for_server';
+export const UNREADS_AND_MENTIONS = 'unreads-and-mentions';
 export const SESSION_EXPIRED = 'session_expired';
 
-export const SET_VIEW_OPTIONS = 'set-view-name';
 export const REACT_APP_INITIALIZED = 'react-app-initialized';
-
-export const TOGGLE_BACK_BUTTON = 'toggle-back-button';
 
 export const SHOW_SETTINGS_WINDOW = 'show-settings-window';
 
@@ -83,20 +78,18 @@ export const REQUEST_SERVERS_DROPDOWN_INFO = 'request-servers-dropdown-info';
 export const RECEIVE_DROPDOWN_MENU_SIZE = 'receive-dropdown-menu-size';
 
 export const UPDATE_AVAILABLE = 'update-available';
-export const UPDATE_DOWNLOADED = 'update-downloaded';
-export const UPDATE_PROGRESS = 'update-progress';
-export const UPDATE_REMIND_LATER = 'update-remind-later';
-export const CANCEL_UPDATE_DOWNLOAD = 'cancel-update-download';
-export const CANCEL_UPGRADE = 'cancel-upgrade';
-export const START_UPDATE_DOWNLOAD = 'start-update-download';
-export const START_UPGRADE = 'start-upgrade';
 export const CHECK_FOR_UPDATES = 'check-for-updates';
 export const NO_UPDATE_AVAILABLE = 'no-update-available';
+export const OPEN_WINDOWS_STORE = 'open-windows-store';
+export const DOWNLOAD_UPDATE_MANUALLY = 'download-update-manually';
+export const OPEN_UPDATE_GUIDE = 'open-update-guide';
+export const OPEN_LINUX_GITHUB_RELEASE = 'open-linux-github-release';
+export const GET_IS_MAC_APP_STORE = 'get-is-mac-app-store';
+export const OPEN_MAC_APP_STORE = 'open-mac-app-store';
+export const SKIP_VERSION = 'skip-version';
 
-export const BROWSER_HISTORY_BUTTON = 'browser-history-button';
 export const BROWSER_HISTORY_PUSH = 'browser-history-push';
-export const APP_LOGGED_IN = 'app-logged-in';
-export const APP_LOGGED_OUT = 'app-logged-out';
+export const TAB_LOGIN_CHANGED = 'tab-login-changed';
 
 export const GET_AVAILABLE_SPELL_CHECKER_LANGUAGES = 'get-available-spell-checker-languages';
 
@@ -106,31 +99,33 @@ export const GET_MODAL_UNCLOSEABLE = 'get-modal-uncloseable';
 
 export const UPDATE_PATHS = 'update-paths';
 
+export const SET_URL_FOR_URL_VIEW = 'set-url-for-url-view';
 export const UPDATE_URL_VIEW_WIDTH = 'update-url-view-width';
 
-export const RELOAD_CURRENT_VIEW = 'reload-current-view';
+export const OPEN_SERVER_EXTERNALLY = 'open-server-externally';
+export const OPEN_SERVER_UPGRADE_LINK = 'open-server-upgrade-link';
+export const OPEN_CHANGELOG_LINK = 'open-changelog-link';
 
 export const PING_DOMAIN = 'ping-domain';
 
 export const GET_LANGUAGE_INFORMATION = 'get-language-information';
 export const GET_AVAILABLE_LANGUAGES = 'get-available-languages';
 
-export const VIEW_FINISHED_RESIZING = 'view-finished-resizing';
-
 // Calls
-export const DISPATCH_GET_DESKTOP_SOURCES = 'dispatch-get-desktop-sources';
-export const DESKTOP_SOURCES_RESULT = 'desktop-sources-result';
+export const GET_DESKTOP_SOURCES = 'get-desktop-sources';
 export const DESKTOP_SOURCES_MODAL_REQUEST = 'desktop-sources-modal-request';
 export const CALLS_JOIN_CALL = 'calls-join-call';
 export const CALLS_LEAVE_CALL = 'calls-leave-call';
 export const CALLS_WIDGET_RESIZE = 'calls-widget-resize';
 export const CALLS_WIDGET_SHARE_SCREEN = 'calls-widget-share-screen';
-export const CALLS_WIDGET_CHANNEL_LINK_CLICK = 'calls-widget-channel-link-click';
 export const CALLS_LINK_CLICK = 'calls-link-click';
 export const CALLS_JOINED_CALL = 'calls-joined-call';
 export const CALLS_POPOUT_FOCUS = 'calls-popout-focus';
 export const CALLS_ERROR = 'calls-error';
 export const CALLS_JOIN_REQUEST = 'calls-join-request';
+export const CALLS_WIDGET_OPEN_THREAD = 'calls-widget-open-thread';
+export const CALLS_WIDGET_OPEN_STOP_RECORDING_MODAL = 'calls-widget-open-stop-recording-modal';
+export const CALLS_WIDGET_OPEN_USER_SETTINGS = 'calls-widget-open-user-settings';
 
 export const REQUEST_CLEAR_DOWNLOADS_DROPDOWN = 'request-clear-downloads-dropdown';
 export const CLOSE_DOWNLOADS_DROPDOWN = 'close-downloads-dropdown';
@@ -143,7 +138,6 @@ export const DOWNLOADS_DROPDOWN_OPEN_FILE = 'downloads-dropdown-open-file';
 export const REQUEST_HAS_DOWNLOADS = 'request-has-downloads';
 export const DOWNLOADS_DROPDOWN_FOCUSED = 'downloads-dropdown-focused';
 export const RECEIVE_DOWNLOADS_DROPDOWN_SIZE = 'receive-downloads-dropdown-size';
-export const GET_DOWNLOADED_IMAGE_THUMBNAIL_LOCATION = 'get-downloaded-image-thumbnail-location';
 
 export const OPEN_DOWNLOADS_DROPDOWN_MENU = 'open-downloads-dropdown-menu';
 export const CLOSE_DOWNLOADS_DROPDOWN_MENU = 'close-downloads-dropdown-menu';
@@ -156,8 +150,6 @@ export const DOWNLOADS_DROPDOWN_MENU_CLEAR_FILE = 'downloads-dropdown-menu-clear
 export const DOWNLOADS_DROPDOWN_MENU_OPEN_FILE = 'downloads-dropdown-menu-open-file';
 export const DOWNLOADS_DROPDOWN_MENU_SHOW_FILE_IN_FOLDER = 'downloads-dropdown-menu-show-file-in-folder';
 
-export const SERVERS_URL_MODIFIED = 'servers-modified';
-export const SERVERS_UPDATE = 'servers-update';
 export const UPDATE_SERVER_ORDER = 'update-server-order';
 export const UPDATE_TAB_ORDER = 'update-tab-order';
 export const GET_LAST_ACTIVE = 'get-last-active';
@@ -167,9 +159,111 @@ export const GET_ORDERED_TABS_FOR_SERVER = 'get-ordered-tabs-for-server';
 export const UPDATE_APPSTATE = 'update-appstate';
 export const UPDATE_APPSTATE_TOTALS = 'update-appstate-totals';
 export const UPDATE_APPSTATE_FOR_VIEW_ID = 'update-appstate-for-view-id';
+export const UPDATE_APPSTATE_FOR_SERVER_ID = 'update-appstate-for-server-id';
 
 export const MAIN_WINDOW_CREATED = 'main-window-created';
 export const MAIN_WINDOW_RESIZED = 'main-window-resized';
 export const MAIN_WINDOW_FOCUSED = 'main-window-focused';
+export const MAIN_WINDOW_MINIMIZE_TO_TRAY = 'main-window-minimize-to-tray';
+export const MAIN_WINDOW_CLOSE_CONFIRM = 'main-window-close-confirm';
 
 export const VALIDATE_SERVER_URL = 'validate-server-url';
+
+export const GET_IS_DEV_MODE = 'get-is-dev-mode';
+
+export const TOGGLE_SECURE_INPUT = 'toggle-secure-input';
+
+export const REQUEST_BROWSER_HISTORY_STATUS = 'request-browser-history-status';
+export const BROWSER_HISTORY_STATUS_UPDATED = 'browser-history-status-updated';
+
+export const NOTIFICATION_CLICKED = 'notification-clicked';
+
+export const OPEN_NOTIFICATION_PREFERENCES = 'open-notification-preferences';
+export const OPEN_WINDOWS_CAMERA_PREFERENCES = 'open-windows-camera-preferences';
+export const OPEN_WINDOWS_MICROPHONE_PREFERENCES = 'open-windows-microphone-preferences';
+export const GET_MEDIA_ACCESS_STATUS = 'get-media-access-status';
+
+export const GET_NONCE = 'get-nonce';
+
+export const DEVELOPER_MODE_UPDATED = 'developer-mode-updated';
+export const IS_DEVELOPER_MODE_ENABLED = 'is-developer-mode-enabled';
+
+export const METRICS_SEND = 'metrics-send';
+export const METRICS_RECEIVE = 'metrics-receive';
+export const METRICS_REQUEST = 'metrics-request';
+
+export const GET_UNIQUE_SERVERS_WITH_PERMISSIONS = 'get-unique-servers-with-permissions';
+export const ADD_SERVER = 'add-server';
+export const EDIT_SERVER = 'edit-server';
+export const REMOVE_SERVER = 'remove-server';
+
+// WebContents Manager Events
+export const OPEN_POPOUT_MENU = 'open-popout-menu';
+export const CLEAR_CACHE_AND_RELOAD = 'clear-cache-and-reload';
+
+// Server Manager Events
+export const SERVER_ADDED = 'server-added';
+export const SERVER_REMOVED = 'server-removed';
+export const SERVER_URL_CHANGED = 'server-url-changed';
+export const SERVER_NAME_CHANGED = 'server-name-changed';
+export const SERVER_SWITCHED = 'server-switched';
+export const SERVER_LOGGED_IN_CHANGED = 'server-logged-in-changed';
+export const SERVER_ORDER_UPDATED = 'server-order-updated';
+export const SERVER_PRE_AUTH_SECRET_CHANGED = 'server-pre-auth-secret-changed';
+
+// View Manager Events
+export const VIEW_CREATED = 'view-created';
+export const VIEW_TITLE_UPDATED = 'view-title-updated';
+export const VIEW_TYPE_REMOVED = 'view-type-removed';
+export const VIEW_TYPE_ADDED = 'view-type-added';
+export const VIEW_PRIMARY_UPDATED = 'view-primary-updated';
+export const VIEW_REMOVED = 'view-removed';
+
+// Tab Manager Events
+export const ACTIVE_TAB_CHANGED = 'active-tab-changed';
+export const TAB_ORDER_UPDATED = 'tab-order-updated';
+export const TAB_ADDED = 'tab-added';
+export const TAB_REMOVED = 'tab-removed';
+
+// Front-end tab management
+export const GET_CURRENT_SERVER = 'get-current-server';
+export const GET_ACTIVE_TAB_FOR_SERVER = 'get-active-tab-for-server';
+export const UPDATE_TAB_TITLE = 'update-tab-title';
+export const CREATE_NEW_TAB = 'create-new-tab';
+export const CLOSE_TAB = 'close-tab';
+
+// Popout Manager Events
+export const CREATE_NEW_WINDOW = 'create-new-window';
+export const UPDATE_POPOUT_TITLE = 'update-popout-title';
+export const CAN_POPOUT = 'can-popout';
+export const OPEN_POPOUT = 'open-popout';
+export const CAN_USE_POPOUT_OPTION = 'can-use-popout-option';
+export const SEND_TO_PARENT = 'send-to-parent';
+export const MESSAGE_FROM_PARENT = 'message-from-parent';
+export const SEND_TO_POPOUT = 'send-to-popout';
+export const MESSAGE_FROM_POPOUT = 'message-from-popout';
+export const POPOUT_CLOSED = 'popout-closed';
+export const UPDATE_POPOUT_TITLE_TEMPLATE = 'update-popout-title-template';
+
+// View close
+export const WINDOW_CLOSE = 'window-close';
+
+// View limit events
+export const VIEW_LIMIT_UPDATED = 'view-limit-updated';
+export const GET_IS_VIEW_LIMIT_REACHED = 'get-is-view-limit-reached';
+
+// Secure storage
+export const SECURE_STORAGE_GET = 'secure-storage-get';
+
+// Theme events
+export const GET_THEME = 'get-theme';
+export const UPDATE_THEME = 'update-theme';
+export const UPDATE_SERVER_THEME = 'update-server-theme';
+export const SERVER_THEME_CHANGED = 'server-theme-changed';
+export const RESET_THEME = 'reset-theme';
+
+// Session attributes events
+export const SESSION_ATTRIBUTES_MANIFEST_INVALIDATED = 'session-attributes-manifest-invalidated';
+export const SESSION_ATTRIBUTES_RESEND_REQUESTED = 'session-attributes-resend-requested';
+export const SESSION_ATTRIBUTES_FIELD_UPDATED = 'session-attributes-field-updated';
+export const GET_SESSION_ATTRIBUTES = 'get-session-attributes';

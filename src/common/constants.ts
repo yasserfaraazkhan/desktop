@@ -1,16 +1,13 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import {DownloadedItem} from 'types/downloads';
-
-import {DownloadItemTypeEnum} from 'main/downloadsManager';
+import type {DownloadedItem, DownloadItemTypeEnum} from 'types/downloads';
 
 /**
  * This string includes special characters so that it's not confused with
  * a file that may have the same filename (eg APP_UPDATE)
  */
 export const APP_UPDATE_KEY = '#:(APP_UPDATE):#';
-
 export const UPDATE_DOWNLOAD_ITEM: Omit<DownloadedItem, 'filename' | 'state'> = {
     type: 'update' as DownloadItemTypeEnum,
     progress: 0,
@@ -20,6 +17,9 @@ export const UPDATE_DOWNLOAD_ITEM: Omit<DownloadedItem, 'filename' | 'state'> = 
     receivedBytes: 0,
     totalBytes: 0,
 };
+
+export const MAILTO_PREFIX = 'mailto:';
+export const MATTERMOST_PROTOCOL = 'mattermost';
 
 // Regular expressions
 export const REGEX_EMAIL = /[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*/; // based on W3C input type email regex
@@ -39,6 +39,8 @@ export const MASK_PATH = 'PATH';
 export const MASK_URL = 'URL';
 
 export const LOGS_MAX_STRING_LENGTH = 63;
+export const POPOUT_RATE_LIMIT = 1000;
+export const MAX_URL_LENGTH = 8192;
 
 // We use this URL inside the Diagnostics to check if the computer has internet connectivity
 export const IS_ONLINE_ENDPOINT = 'https://community.mattermost.com/api/v4/system/ping';
@@ -46,3 +48,29 @@ export const IS_ONLINE_ENDPOINT = 'https://community.mattermost.com/api/v4/syste
 export const COOKIE_NAME_USER_ID = 'MMUSERID';
 export const COOKIE_NAME_CSRF = 'MMCSRF';
 export const COOKIE_NAME_AUTH_TOKEN = 'MMAUTHTOKEN';
+
+export const DEFAULT_HELP_LINK = 'https://docs.mattermost.com/guides/collaborate.html';
+export const DEFAULT_ACADEMY_LINK = 'https://academy.mattermost.com/';
+export const DEFAULT_TE_REPORT_PROBLEM_LINK = 'https://mattermost.com/pl/report-a-bug';
+export const DEFAULT_EE_REPORT_PROBLEM_LINK = 'https://support.mattermost.com/hc/en-us/requests/new';
+export const DEFAULT_UPGRADE_LINK = 'https://forum.mattermost.com/t/mattermost-desktop-app-5-11-important-compatibility-notice/22599';
+export const DEFAULT_CHANGELOG_LINK = 'https://docs.mattermost.com/help/apps/desktop-changelog.html';
+
+export const ModalConstants = {
+    SETTINGS_MODAL: 'settingsModal',
+    NEW_SERVER_MODAL: 'newServer',
+    EDIT_SERVER_MODAL: 'editServer',
+    REMOVE_SERVER_MODAL: 'removeServer',
+    WELCOME_SCREEN_MODAL: 'welcomeScreen',
+    CERTIFICATE_MODAL: 'certificateModal',
+    LOGIN_MODAL: 'loginModal',
+    PROXY_LOGIN_MODAL: 'proxyLoginModal',
+    PRE_AUTH_MODAL: 'preAuthModal',
+    MESSAGE_MODAL: 'messageModal',
+};
+
+export const FILTERED_PROTOCOLS = new Set(['http:', 'https:', 'ws:', 'wss:']);
+export const WEBSOCKET_PROTOCOL_EQUIVALENTS: {[protocol: string]: string} = {
+    'ws:': 'http:',
+    'wss:': 'https:',
+};

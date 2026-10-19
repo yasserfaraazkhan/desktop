@@ -1,12 +1,13 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 
-import {shell} from 'electron';
-
+import {app, shell} from 'electron';
 import {getDoNotDisturb as getDarwinDoNotDisturb} from 'macos-notification-state';
 
+import Config from 'common/config';
+import {APP_UPDATE_KEY} from 'common/constants';
 import {DownloadsManager} from 'main/downloadsManager';
 
 const downloadLocationMock = '/path/to/downloads';
@@ -27,8 +28,10 @@ jest.mock('electron', () => {
     return {
         app: {
             getAppPath: jest.fn(),
+            getPath: jest.fn(() => '/valid/downloads/path'),
+            startAccessingSecurityScopedResource: jest.fn(),
         },
-        BrowserView: jest.fn().mockImplementation(() => ({
+        WebContentsView: jest.fn().mockImplementation(() => ({
             webContents: {
                 loadURL: jest.fn(),
                 focus: jest.fn(),
@@ -72,22 +75,36 @@ jest.mock('fs', () => ({
     existsSync: jest.fn().mockReturnValue(false),
     readFileSync: jest.fn().mockImplementation((text) => text),
     writeFile: jest.fn(),
+    copyFileSync: jest.fn(),
 }));
 jest.mock('macos-notification-state', () => ({
     getDoNotDisturb: jest.fn(),
 }));
 jest.mock('main/notifications', () => ({}));
-jest.mock('main/windows/mainWindow', () => ({
+jest.mock('app/mainWindow/mainWindow', () => ({
     sendToRenderer: jest.fn(),
+    on: jest.fn(),
 }));
-jest.mock('main/views/viewManager', () => ({}));
+jest.mock('common/views/viewManager', () => ({
+    on: jest.fn(),
+}));
+
+jest.mock('app/views/webContentsManager', () => ({
+    getViewByWebContentsId: jest.fn(),
+}));
 jest.mock('common/config', () => {
     const original = jest.requireActual('common/config');
     return {
         ...original,
+        canUpgrade: true,
         downloadLocation: downloadLocationMock,
     };
 });
+
+jest.mock('common/config/policyConfigLoader', () => ({
+    getPolicyConfig: jest.fn().mockReturnValue({}),
+    getAppsUseLightTheme: jest.fn().mockReturnValue(true),
+}));
 
 const downloadsJson = {
     'file1.txt': {
@@ -146,11 +163,11 @@ describe('main/downloadsManager', () => {
     it('should mark "completed" files that were deleted as "deleted"', () => {
         expect(new DownloadsManager(JSON.stringify(downloadsJson))).toHaveProperty('downloads', {...downloadsJson, 'file1.txt': {...downloadsJson['file1.txt'], state: 'deleted'}});
     });
-    it('should handle a new download', () => {
+    it('should handle a new download', async () => {
         const dl = new DownloadsManager({});
         path.parse.mockImplementation(() => ({base: 'file.txt'}));
         dl.willDownloadURLs.set('http://some-url.com/some-text.txt', {filePath: locationMock});
-        dl.handleNewDownload({preventDefault: jest.fn()}, item, {id: 0, getURL: jest.fn(), downloadURL: jest.fn()});
+        await dl.handleNewDownload({preventDefault: jest.fn()}, item, {id: 0, getURL: jest.fn(), downloadURL: jest.fn()});
         expect(dl).toHaveProperty('downloads', {'file.txt': {
             addedAt: nowSeconds * 1000,
             filename: 'file.txt',
@@ -175,6 +192,20 @@ describe('main/downloadsManager', () => {
         };
         dl.webRequestOnHeadersReceivedHandler(details, jest.fn());
         expect(dl.fileSizes.get('file.txt')).toBe('4242');
+    });
+
+    it('MM-68690 - should not throw when content-disposition header is missing', () => {
+        const dl = new DownloadsManager({});
+        const details = {
+            responseHeaders: {
+                'content-encoding': ['gzip'],
+                'x-uncompressed-content-length': ['4242'],
+            },
+        };
+        const cb = jest.fn();
+        expect(() => dl.webRequestOnHeadersReceivedHandler(details, cb)).not.toThrow();
+        expect(cb).toHaveBeenCalledWith({});
+        expect(dl.fileSizes.size).toBe(0);
     });
 
     it('should clear the downloads list', () => {
@@ -223,6 +254,109 @@ describe('main/downloadsManager', () => {
         expect(Object.keys(dl.downloads).includes('invalid_file4.txt')).toBe(false);
         expect(Object.keys(dl.downloads).includes('invalid_file5.txt')).toBe(false);
         expect(Object.keys(dl.downloads).includes('invalid_file6.txt')).toBe(false);
+    });
+
+    describe('doneEventController', () => {
+        const bookmarkedItem = {
+            ...item,
+            savePath: '/temp/file.txt',
+        };
+
+        const setupBookmark = (dl) => {
+            path.parse.mockImplementation(() => ({base: 'file.txt'}));
+            path.resolve.mockImplementation((...args) => args.join('/'));
+            dl.open = true;
+            dl.bookmarks.set('file.txt', {originalPath: locationMock, bookmark: 'some-bookmark'});
+        };
+
+        it('should copy the downloaded file to its bookmarked location', async () => {
+            const dl = new DownloadsManager({});
+            setupBookmark(dl);
+            const stopAccessing = jest.fn();
+            app.startAccessingSecurityScopedResource.mockReturnValue(stopAccessing);
+
+            await dl.doneEventController({}, 'completed', bookmarkedItem, {id: 0});
+
+            expect(fs.copyFileSync).toHaveBeenCalledWith('/valid/downloads/path/file.txt', locationMock);
+            expect(stopAccessing).toHaveBeenCalled();
+            expect(dl.downloads['file.txt'].state).toBe('completed');
+            expect(dl.downloads['file.txt'].location).toBe(locationMock);
+        });
+
+        it('MM-70565 - should not throw when the downloaded file cannot be copied', async () => {
+            const dl = new DownloadsManager({});
+            setupBookmark(dl);
+            const stopAccessing = jest.fn();
+            app.startAccessingSecurityScopedResource.mockReturnValue(stopAccessing);
+            fs.copyFileSync.mockImplementation(() => {
+                throw new Error('ENOENT: no such file or directory');
+            });
+
+            await expect(dl.doneEventController({}, 'completed', bookmarkedItem, {id: 0})).resolves.not.toThrow();
+
+            expect(stopAccessing).toHaveBeenCalled();
+            expect(dl.downloads['file.txt'].state).toBe('interrupted');
+            expect(dl.bookmarks.has('file.txt')).toBe(false);
+        });
+
+        it('MM-70565 - should not throw when the bookmark cannot be accessed', async () => {
+            const dl = new DownloadsManager({});
+            setupBookmark(dl);
+            app.startAccessingSecurityScopedResource.mockImplementation(() => {
+                throw new Error('invalid bookmark');
+            });
+
+            await expect(dl.doneEventController({}, 'completed', bookmarkedItem, {id: 0})).resolves.not.toThrow();
+
+            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(dl.downloads['file.txt'].state).toBe('interrupted');
+        });
+
+        it('MM-70565 - should not throw when an interrupted download cannot be copied', async () => {
+            const dl = new DownloadsManager({});
+            setupBookmark(dl);
+            app.startAccessingSecurityScopedResource.mockReturnValue(jest.fn());
+            fs.copyFileSync.mockImplementation(() => {
+                throw new Error('ENOENT: no such file or directory');
+            });
+
+            await expect(dl.doneEventController({}, 'cancelled', bookmarkedItem, {id: 0})).resolves.not.toThrow();
+
+            expect(dl.downloads['file.txt'].state).toBe('interrupted');
+        });
+
+        it('should not attempt to copy anything for downloads without a bookmark', async () => {
+            const dl = new DownloadsManager({});
+            path.parse.mockImplementation(() => ({base: 'file.txt'}));
+            dl.open = true;
+
+            await dl.doneEventController({}, 'completed', bookmarkedItem, {id: 0});
+
+            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(app.startAccessingSecurityScopedResource).not.toHaveBeenCalled();
+            expect(dl.downloads['file.txt'].state).toBe('completed');
+        });
+    });
+
+    it('should remove updates if they are disabled', () => {
+        const file = JSON.stringify({
+            ...downloadsJson,
+            [APP_UPDATE_KEY]: {
+                type: 'update',
+                progress: 0,
+                location: '',
+                addedAt: 0,
+                receivedBytes: 0,
+                totalBytes: 0,
+                state: 'available',
+                filename: '1.2.3',
+            },
+        });
+        const dl = new DownloadsManager(file);
+        expect(dl.hasUpdate()).toBe(true);
+        Config.canUpgrade = false;
+        dl.init();
+        expect(dl.hasUpdate()).toBe(false);
     });
 });
 

@@ -3,31 +3,41 @@
 
 import {v4 as uuid} from 'uuid';
 
-import {UniqueServer, Server} from 'types/config';
+import type {Theme} from '@mattermost/desktop-api';
 
 import {parseURL} from 'common/utils/url';
+
+import type {UniqueServer, Server} from 'types/config';
 
 export class MattermostServer {
     id: string;
     name: string;
     url!: URL;
     isPredefined: boolean;
+    initialLoadURL?: URL;
+    isLoggedIn: boolean;
+    preAuthSecret?: string;
+    theme?: Theme;
 
-    constructor(server: Server, isPredefined: boolean) {
+    constructor(server: Server, isPredefined: boolean, initialLoadURL?: URL, preAuthSecret?: string) {
         this.id = uuid();
 
         this.name = server.name;
         this.updateURL(server.url);
 
         this.isPredefined = isPredefined;
+        this.initialLoadURL = initialLoadURL;
+        this.isLoggedIn = false;
+        this.preAuthSecret = preAuthSecret;
     }
 
-    updateURL = (url: string) => {
-        this.url = parseURL(url)!;
-        if (!this.url) {
+    updateURL = (url: string | URL) => {
+        const parsedURL = parseURL(url);
+        if (!parsedURL) {
             throw new Error('Invalid url for creating a server');
         }
-    }
+        this.url = parsedURL;
+    };
 
     toUniqueServer = (): UniqueServer => {
         return {
@@ -35,6 +45,7 @@ export class MattermostServer {
             url: this.url.toString(),
             id: this.id,
             isPredefined: this.isPredefined,
+            isLoggedIn: this.isLoggedIn,
         };
-    }
+    };
 }

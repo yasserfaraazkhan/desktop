@@ -6,7 +6,8 @@ import {ipcMain} from 'electron';
 import {GET_AVAILABLE_LANGUAGES, GET_LANGUAGE_INFORMATION} from 'common/communication';
 import {Logger} from 'common/log';
 
-import {Language, languages} from '../../i18n/i18n';
+import type {Language} from '../../i18n/i18n';
+import {languages} from '../../i18n/i18n';
 
 export function localizeMessage(s: string, defaultString = '', values: any = {}) {
     let str = i18nManager.currentLanguage.url[s] || defaultString;
@@ -29,33 +30,33 @@ export class I18nManager {
     }
 
     setLocale = (locale: string) => {
-        log.debug('setLocale', locale);
+        log.debug('setLocale', {locale});
 
         if (this.isLanguageAvailable(locale)) {
             this.currentLanguage = this.getLanguages()[locale];
-            log.info('Set new language', locale);
+            log.info('Set new language', {locale});
             return true;
         }
 
-        log.warn('Failed to set new language', locale);
+        log.warn('Failed to set new language', {locale});
         return false;
-    }
+    };
 
     getLanguages = () => {
         return languages;
-    }
+    };
 
     getAvailableLanguages = () => {
         return Object.keys(languages);
-    }
+    };
 
     isLanguageAvailable = (locale: string) => {
         return Boolean(this.getLanguages()[locale]);
-    }
+    };
 
     getCurrentLanguage = () => {
         return this.currentLanguage;
-    }
+    };
 }
 
 const i18nManager = new I18nManager();

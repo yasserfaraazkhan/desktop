@@ -2,7 +2,9 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import {BuildConfig} from 'types/config';
+import type {BuildConfig} from 'types/config';
+
+import {DEFAULT_ACADEMY_LINK, DEFAULT_HELP_LINK, DEFAULT_UPGRADE_LINK} from '../../common/constants';
 
 // For detailed guides, please refer to https://docs.mattermost.com/deployment/desktop-app-deployment.html
 
@@ -19,6 +21,7 @@ import {BuildConfig} from 'types/config';
  *                                          when "enableServerManagement is set to false
  * @prop {[]} managedResources - Defines which paths are managed
  * @prop {[]} allowedProtocols - Defines which protocols should be automatically allowed
+ * @prop {[]} trustedEmbeddedMediaOrigins - Explicit origin pairs that may share media permissions for embedded content
  */
 const buildConfig: BuildConfig = {
     defaultServers: [/*
@@ -27,9 +30,16 @@ const buildConfig: BuildConfig = {
       url: 'https://example.com'
     }
   */],
-    helpLink: 'https://docs.mattermost.com/messaging/managing-desktop-app-servers.html',
+    helpLink: DEFAULT_HELP_LINK,
+    academyLink: DEFAULT_ACADEMY_LINK,
+    upgradeLink: DEFAULT_UPGRADE_LINK,
     enableServerManagement: true,
-    enableAutoUpdater: true,
+    enableUpdateNotifications: true,
+    updateNotificationURL: 'https://releases.mattermost.com/desktop',
+    macAppStoreUpdateURL: 'macappstore://apps.apple.com/us/app/mattermost-desktop/id1614666244',
+    windowsStoreUpdateURL: 'ms-windows-store://pdp/?productid=XP8BR8MH3LPKLT',
+    linuxUpdateURL: 'https://docs.mattermost.com/deployment-guide/desktop/linux-desktop-install.html',
+    linuxGitHubReleaseURL: 'https://github.com/mattermost/desktop/releases/tag',
     managedResources: ['trusted'],
     allowedProtocols: [
         'mattermost',
@@ -37,6 +47,7 @@ const buildConfig: BuildConfig = {
         'mailto',
         'tel',
     ],
+    trustedEmbeddedMediaOrigins: [],
 };
 
 export default buildConfig;

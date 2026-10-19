@@ -1,14 +1,17 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import {ipcRenderer, Rectangle} from 'electron/renderer';
+import type {ipcRenderer, Rectangle} from 'electron/renderer';
 
-import {Language} from '../../i18n/i18n';
+import type {Theme} from '@mattermost/desktop-api';
 
-import {CombinedConfig, LocalConfiguration, UniqueView, UniqueServer} from './config';
-import {DownloadedItem, DownloadedItems, DownloadsMenuOpenEventPayload} from './downloads';
-import {SaveQueueItem} from './settings';
-import {URLValidationResult} from './server';
+import type {CombinedConfig, LocalConfiguration, UniqueServer, Server, UniqueView} from './config';
+import type {DownloadedItem, DownloadedItems, DownloadsMenuOpenEventPayload} from './downloads';
+import type {UniqueServerWithPermissions, Permissions} from './permissions';
+import type {URLValidationResult} from './server';
+import type {SaveQueueItem} from './settings';
+
+import type {Language} from '../../i18n/i18n';
 
 declare global {
     interface Window {
@@ -27,37 +30,64 @@ declare global {
         timers: {
             setImmediate: typeof setImmediate;
         };
-        mas: {
-            getThumbnailLocation: (location: string) => Promise<string>;
-        };
         desktop: {
             quit: (reason: string, stack: string) => void;
             openAppMenu: () => void;
             closeServersDropdown: () => void;
             openServersDropdown: () => void;
             switchTab: (viewId: string) => void;
-            closeView: (viewId: string) => void;
-            closeWindow: () => void;
-            minimizeWindow: () => void;
-            maximizeWindow: () => void;
-            restoreWindow: () => void;
-            doubleClickOnWindow: (windowName?: string) => void;
-            focusCurrentView: () => void;
-            reloadCurrentView: () => void;
+            closeTab: (viewId: string) => void;
+            exitFullScreen: () => void;
+            doubleClickOnWindow: () => void;
+            openServerExternally: () => void;
+            openServerUpgradeLink: () => void;
+            openChangelogLink: () => void;
+            openWindowsStore: () => void;
+            downloadUpdateManually: () => void;
+            openUpdateGuide: () => void;
+            openLinuxGitHubRelease: () => void;
+            getIsMacAppStore: () => Promise<boolean>;
+            openMacAppStore: () => void;
+            skipVersion: () => void;
             closeDownloadsDropdown: () => void;
             closeDownloadsDropdownMenu: () => void;
             openDownloadsDropdown: () => void;
             goBack: () => void;
             checkForUpdates: () => void;
             updateConfiguration: (saveQueueItems: SaveQueueItem[]) => void;
+            getNonce: () => Promise<string | undefined>;
+            isDeveloperModeEnabled: () => Promise<boolean>;
+            getSecret: (serverUrl: string, keySuffix?: string) => Promise<string | null>;
+            clearCacheAndReload: () => void;
 
             updateServerOrder: (serverOrder: string[]) => Promise<void>;
             updateTabOrder: (serverId: string, viewOrder: string[]) => Promise<void>;
-            getLastActive: () => Promise<{server: string; view: string}>;
+            getCurrentServer: () => Promise<UniqueServer>;
+            getActiveTabForServer: (serverId: string) => Promise<UniqueView | null>;
             getOrderedServers: () => Promise<UniqueServer[]>;
             getOrderedTabsForServer: (serverId: string) => Promise<UniqueView[]>;
-            onUpdateServers: (listener: () => void) => void;
+
+            createNewTab: (serverId: string) => Promise<string>;
+            createNewWindow: (serverId: string) => Promise<string>;
+            openPopoutMenu: (viewId: string) => void;
+            onUpdateTabTitle: (listener: (viewId: string, title: {channelName?: string; teamName?: string; serverName: string}) => void) => void;
+            onUpdatePopoutTitle: (listener: (viewId: string, title: string) => void) => void;
+            onServerAdded: (listener: (serverId: string, setAsCurrentServer: boolean) => void) => void;
+            onServerRemoved: (listener: (serverId: string) => void) => void;
+            onServerUrlChanged: (listener: (serverId: string) => void) => void;
+            onServerNameChanged: (listener: (serverId: string) => void) => void;
+            onServerSwitched: (listener: (serverId: string) => void) => void;
+            onTabAdded: (listener: (serverId: string, tabId: string) => void) => void;
+            onTabRemoved: (listener: (serverId: string, tabId: string) => void) => void;
+            onTabOrderUpdated: (listener: (serverId: string, viewIds: string[]) => void) => void;
             validateServerURL: (url: string, currentId?: string) => Promise<URLValidationResult>;
+            getUniqueServersWithPermissions: () => Promise<UniqueServerWithPermissions[]>;
+            addServer: (server: Server) => void;
+            editServer: (server: UniqueServer, permissions?: Permissions) => void;
+            removeServer: (serverId: string) => void;
+            onServerLoggedInChanged: (listener: (serverId: string, loggedIn: boolean) => void) => void;
+            onViewLimitUpdated: (listener: () => void) => void;
+            getIsViewLimitReached: () => Promise<boolean>;
 
             getConfiguration: () => Promise<CombinedConfig[keyof CombinedConfig] | CombinedConfig>;
             getVersion: () => Promise<{name: string; version: string}>;
@@ -66,16 +96,20 @@ declare global {
             getFullScreenStatus: () => Promise<boolean>;
             getAvailableSpellCheckerLanguages: () => Promise<string[]>;
             getAvailableLanguages: () => Promise<string[]>;
-            getLocalConfiguration: () => Promise<LocalConfiguration[keyof LocalConfiguration] | Partial<LocalConfiguration>>;
+            getLocalConfiguration: () => Promise<LocalConfiguration>;
             getDownloadLocation: (downloadLocation?: string) => Promise<string>;
             getLanguageInformation: () => Promise<Language>;
+            getSessionAttributes: () => Promise<Record<string, string>>;
+            getTheme: () => Promise<Theme>;
 
-            onSynchronizeConfig: (listener: () => void) => void;
-            onReloadConfiguration: (listener: () => void) => void;
+            onReloadConfiguration: (listener: () => void) => () => void;
             onDarkModeChange: (listener: (darkMode: boolean) => void) => void;
+            onThemeChange: (listener: (theme: Theme) => void) => void;
+            onResetTheme: (listener: () => void) => void;
             onLoadRetry: (listener: (viewId: string, retry: Date, err: string, loadUrl: string) => void) => void;
             onLoadSuccess: (listener: (viewId: string) => void) => void;
             onLoadFailed: (listener: (viewId: string, err: string, loadUrl: string) => void) => void;
+            onLoadIncompatibleServer: (listener: (viewId: string, loadUrl: string) => void) => void;
             onSetActiveView: (listener: (serverId: string, viewId: string) => void) => void;
             onMaximizeChange: (listener: (maximize: boolean) => void) => void;
             onEnterFullScreen: (listener: () => void) => void;
@@ -83,7 +117,6 @@ declare global {
             onPlaySound: (listener: (soundName: string) => void) => void;
             onModalOpen: (listener: () => void) => void;
             onModalClose: (listener: () => void) => void;
-            onToggleBackButton: (listener: (showExtraBar: boolean) => void) => void;
             onUpdateMentions: (listener: (view: string, mentions: number, unreads: boolean, isExpired: boolean) => void) => void;
             onCloseServersDropdown: (listener: () => void) => void;
             onOpenServersDropdown: (listener: () => void) => void;
@@ -91,11 +124,16 @@ declare global {
             onOpenDownloadsDropdown: (listener: () => void) => void;
             onShowDownloadsDropdownButtonBadge: (listener: () => void) => void;
             onHideDownloadsDropdownButtonBadge: (listener: () => void) => void;
-            onUpdateDownloadsDropdown: (listener: (downloads: DownloadedItems, darkMode: boolean, windowBounds: Rectangle, item: DownloadedItem) => void) => void;
+            onUpdateDownloadsDropdown: (listener: (downloads: DownloadedItems, windowBounds: Rectangle, item: DownloadedItem) => void) => void;
             onAppMenuWillClose: (listener: () => void) => void;
             onFocusThreeDotMenu: (listener: () => void) => void;
-
+            onUpdateMentionsForServer: (listener: (serverId: string, expired: boolean, mentions: number, unreads: boolean) => void) => void;
+            onSetURLForURLView: (listener: (link?: string) => void) => void;
             updateURLViewWidth: (width?: number) => void;
+            openNotificationPreferences: () => void;
+            openWindowsCameraPreferences: () => void;
+            openWindowsMicrophonePreferences: () => void;
+            getMediaAccessStatus: (mediaType: 'microphone' | 'camera' | 'screen') => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>;
 
             modals: {
                 cancelModal: <T>(data?: T) => void;
@@ -115,8 +153,6 @@ declare global {
                 requestInfo: () => void;
                 sendSize: (width: number, height: number) => void;
                 openFile: (item: DownloadedItem) => void;
-                startUpdateDownload: () => void;
-                startUpgrade: () => void;
                 requestClearDownloadsDropdown: () => void;
                 toggleDownloadsDropdownMenu: (payload: DownloadsMenuOpenEventPayload) => void;
                 focus: () => void;
@@ -129,7 +165,7 @@ declare global {
                 clearFile: (item: DownloadedItem) => void;
                 openFile: (item: DownloadedItem) => void;
 
-                onUpdateDownloadsDropdownMenu: (listener: (item: DownloadedItem, darkMode: boolean) => void) => void;
+                onUpdateDownloadsDropdownMenu: (listener: (item: DownloadedItem) => void) => void;
             };
 
             serverDropdown: {
@@ -142,16 +178,21 @@ declare global {
 
                 onUpdateServerDropdown: (listener: (
                     servers: UniqueServer[],
-                    darkMode: boolean,
                     windowBounds: Rectangle,
                     activeServer?: string,
                     enableServerManagement?: boolean,
-                    hasGPOServers?: boolean,
                     expired?: Map<string, boolean>,
                     mentions?: Map<string, number>,
                     unreads?: Map<string, boolean>,
                 ) => void) => void;
             };
+
+        };
+    }
+
+    interface Navigator {
+        windowControlsOverlay?: {
+            getTitlebarAreaRect: () => DOMRect;
         };
     }
 }

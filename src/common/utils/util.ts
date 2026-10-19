@@ -2,7 +2,7 @@
 // See LICENSE.txt for license information.
 // Copyright (c) 2015-2016 Yuya Ochiai
 
-import {Rectangle} from 'electron';
+import type {Rectangle} from 'electron';
 
 import {DEVELOPMENT, PRODUCTION} from './constants';
 
@@ -68,6 +68,15 @@ export const escapeRegex = (s?: string) => {
 
 export function copy<T>(data: T) {
     return Object.assign({}, data);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TestGlobal = typeof global & Record<string, any>;
+
+export function setTestField(name: string, value: unknown): void {
+    if (process.env.NODE_ENV === 'test') {
+        (global as TestGlobal)[name] = value;
+    }
 }
 
 export default {

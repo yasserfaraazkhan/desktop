@@ -1,19 +1,28 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
-import log, {LevelOption} from 'electron-log';
+import type {LevelOption} from 'electron-log';
+import log from 'electron-log';
 
 import Util from 'common/utils/util';
+
+// Turn off sync logging to prevent blocking the main thread
+// One downside to this is that some logs may not be written to the log file when the app closes
+log.transports.file.sync = false;
+log.transports.file.maxSize = 10 * 1024 * 1024;
 
 export const setLoggingLevel = (level: string) => {
     if (log.transports.file.level === level) {
         return;
     }
-    log.error('Logger', 'Log level set to:', level);
+    log.error('Logger', 'Log level set to:', {level});
 
     log.transports.console.level = level as LevelOption;
     log.transports.file.level = level as LevelOption;
 };
+
+// Start on info by default
+setLoggingLevel('info');
 
 export const getLevel = () => log.transports.file.level as string;
 
@@ -34,15 +43,15 @@ export class Logger {
             silly: this.prefixed(log.silly, ...prefixes),
             log: this.prefixed(log.log, ...prefixes),
         };
-    }
+    };
 
     private prefixed = (func: (...args: any[]) => void, ...additionalPrefixes: string[]) => {
         return (...args: any[]) => func(...this.prefixes, ...this.shortenPrefixes(...additionalPrefixes), ...args);
-    }
+    };
 
     private shortenPrefixes = (...prefixes: string[]) => {
         return prefixes.map((prefix) => `[${Util.shorten(prefix)}]`);
-    }
+    };
 
     error = this.prefixed(log.error);
     warn = this.prefixed(log.warn);

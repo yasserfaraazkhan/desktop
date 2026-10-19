@@ -2,26 +2,20 @@
 // See LICENSE.txt for license information.
 
 import React from 'react';
-import classNames from 'classnames';
 
-import Logo from 'renderer/components/Logo';
+import Logo from 'renderer/components/Images/Logo';
 
-import 'renderer/css/components/Header.scss';
+import './Header.scss';
 
 type HeaderProps = {
     alternateLink?: React.ReactElement;
-    darkMode?: boolean;
 }
 
 const Header = ({
     alternateLink,
-    darkMode,
 }: HeaderProps) => (
     <div
-        className={classNames(
-            'Header',
-            {'Header--darkMode': darkMode},
-        )}
+        className='Header'
     >
         <div className='Header__main'>
             <div className='Header__logo'>

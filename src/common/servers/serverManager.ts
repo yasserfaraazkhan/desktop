@@ -3,22 +3,26 @@
 
 import EventEmitter from 'events';
 
-import {Server, ConfigServer, ConfigView} from 'types/config';
-import {RemoteInfo} from 'types/server';
+import type {Theme} from '@mattermost/desktop-api';
 
-import Config from 'common/config';
 import {
-    SERVERS_URL_MODIFIED,
-    SERVERS_UPDATE,
+    SERVER_ADDED,
+    SERVER_REMOVED,
+    SERVER_URL_CHANGED,
+    SERVER_NAME_CHANGED,
+    SERVER_SWITCHED,
+    SERVER_LOGGED_IN_CHANGED,
+    SERVER_ORDER_UPDATED,
+    SERVER_PRE_AUTH_SECRET_CHANGED,
+    SERVER_THEME_CHANGED,
 } from 'common/communication';
-import {Logger, getLevel} from 'common/log';
+import Config from 'common/config';
+import {Logger} from 'common/log';
 import {MattermostServer} from 'common/servers/MattermostServer';
-import {TAB_FOCALBOARD, TAB_MESSAGING, TAB_PLAYBOOKS, MattermostView, getDefaultViews} from 'common/views/View';
-import MessagingView from 'common/views/MessagingView';
-import FocalboardView from 'common/views/FocalboardView';
-import PlaybooksView from 'common/views/PlaybooksView';
 import {getFormattedPathName, isInternalURL, parseURL} from 'common/utils/url';
-import Utils from 'common/utils/util';
+
+import type {ConfigServer, Server} from 'types/config';
+import type {RemoteInfo} from 'types/server';
 
 const log = new Logger('ServerManager');
 
@@ -26,10 +30,7 @@ export class ServerManager extends EventEmitter {
     private servers: Map<string, MattermostServer>;
     private remoteInfo: Map<string, RemoteInfo>;
     private serverOrder: string[];
-
-    private views: Map<string, MattermostView>;
-    private viewOrder: Map<string, string[]>;
-    private lastActiveView: Map<string, string>;
+    private currentServerId?: string;
 
     constructor() {
         super();
@@ -37,386 +38,26 @@ export class ServerManager extends EventEmitter {
         this.servers = new Map();
         this.remoteInfo = new Map();
         this.serverOrder = [];
-        this.views = new Map();
-        this.viewOrder = new Map();
-        this.lastActiveView = new Map();
-    }
-
-    getOrderedTabsForServer = (serverId: string) => {
-        log.withPrefix(serverId).debug('getOrderedTabsForServer');
-
-        const viewOrder = this.viewOrder.get(serverId);
-        if (!viewOrder) {
-            return [];
-        }
-        return viewOrder.reduce((views, viewId) => {
-            const view = this.views.get(viewId);
-            if (view) {
-                views.push(view);
-            }
-            return views;
-        }, [] as MattermostView[]);
-    }
-
-    getOrderedServers = () => {
-        log.debug('getOrderedServers');
-
-        return this.serverOrder.reduce((servers, srv) => {
-            const server = this.servers.get(srv);
-            if (server) {
-                servers.push(server);
-            }
-            return servers;
-        }, [] as MattermostServer[]);
-    }
-
-    getLastActiveTabForServer = (serverId: string) => {
-        log.withPrefix(serverId).debug('getLastActiveTabForServer');
-
-        const lastActiveView = this.lastActiveView.get(serverId);
-        if (lastActiveView) {
-            const view = this.views.get(lastActiveView);
-            if (view && view?.isOpen) {
-                return view;
-            }
-        }
-        return this.getFirstOpenViewForServer(serverId);
-    }
-
-    getServer = (id: string) => {
-        return this.servers.get(id);
-    }
-
-    getView = (id: string) => {
-        return this.views.get(id);
-    }
-
-    getAllServers = () => {
-        return [...this.servers.values()];
     }
 
     hasServers = () => {
         return Boolean(this.servers.size);
-    }
+    };
 
-    getRemoteInfo = (serverId: string) => {
-        return this.remoteInfo.get(serverId);
-    }
+    getServer = (id: string) => {
+        return this.servers.get(id);
+    };
 
-    updateRemoteInfos = (remoteInfos: Map<string, RemoteInfo>) => {
-        let hasUpdates = false;
-        remoteInfos.forEach((remoteInfo, serverId) => {
-            this.remoteInfo.set(serverId, remoteInfo);
-            hasUpdates = this.updateServerURL(serverId) || hasUpdates;
-            hasUpdates = this.openExtraViews(serverId) || hasUpdates;
-        });
+    getAllServers = () => {
+        return [...this.servers.values()];
+    };
 
-        if (hasUpdates) {
-            this.persistServers();
-        }
-    }
+    getOrderedServers = () => {
+        return this.serverOrder.map((id) => this.servers.get(id)!);
+    };
 
-    lookupViewByURL = (inputURL: URL | string, ignoreScheme = false) => {
-        log.silly('lookupViewByURL', `${inputURL}`, ignoreScheme);
-
-        const parsedURL = parseURL(inputURL);
-        if (!parsedURL) {
-            return undefined;
-        }
-        const server = this.getAllServers().find((server) => {
-            return isInternalURL(parsedURL, server.url, ignoreScheme) && getFormattedPathName(parsedURL.pathname).match(new RegExp(`^${server.url.pathname}(.+)?(/(.+))?$`));
-        });
-        if (!server) {
-            return undefined;
-        }
-        const views = this.getOrderedTabsForServer(server.id);
-
-        let selectedView = views.find((view) => view && view.type === TAB_MESSAGING);
-        views.
-            filter((view) => view && view.type !== TAB_MESSAGING).
-            forEach((view) => {
-                if (getFormattedPathName(parsedURL.pathname).match(new RegExp(`^${view.url.pathname}(/(.+))?`))) {
-                    selectedView = view;
-                }
-            });
-        return selectedView;
-    }
-
-    updateServerOrder = (serverOrder: string[]) => {
-        log.debug('updateServerOrder', serverOrder);
-
-        this.serverOrder = serverOrder;
-        this.persistServers();
-    }
-
-    updateTabOrder = (serverId: string, viewOrder: string[]) => {
-        log.withPrefix(serverId).debug('updateTabOrder', viewOrder);
-
-        this.viewOrder.set(serverId, viewOrder);
-        this.persistServers();
-    }
-
-    addServer = (server: Server) => {
-        const newServer = new MattermostServer(server, false);
-
-        if (this.servers.has(newServer.id)) {
-            throw new Error('ID Collision detected. Cannot add server.');
-        }
-        this.servers.set(newServer.id, newServer);
-
-        this.serverOrder.push(newServer.id);
-        const viewOrder: string[] = [];
-        getDefaultViews().forEach((view) => {
-            const newView = this.getNewView(newServer, view.name, view.isOpen);
-            this.views.set(newView.id, newView);
-            viewOrder.push(newView.id);
-        });
-        this.viewOrder.set(newServer.id, viewOrder);
-
-        // Emit this event whenever we update a server URL to ensure remote info is fetched
-        this.emit(SERVERS_URL_MODIFIED, [newServer.id]);
-        this.persistServers();
-        return newServer;
-    }
-
-    editServer = (serverId: string, server: Server) => {
-        const existingServer = this.servers.get(serverId);
-        if (!existingServer) {
-            return;
-        }
-
-        let urlModified;
-        if (existingServer.url.toString() !== parseURL(server.url)?.toString()) {
-            // Emit this event whenever we update a server URL to ensure remote info is fetched
-            urlModified = () => this.emit(SERVERS_URL_MODIFIED, [serverId]);
-        }
-        existingServer.name = server.name;
-        existingServer.updateURL(server.url);
-        this.servers.set(serverId, existingServer);
-
-        this.viewOrder.get(serverId)?.forEach((viewId) => {
-            const view = this.views.get(viewId);
-            if (view) {
-                view.server = existingServer;
-                this.views.set(viewId, view);
-            }
-        });
-
-        urlModified?.();
-        this.persistServers();
-    }
-
-    removeServer = (serverId: string) => {
-        this.viewOrder.get(serverId)?.forEach((viewId) => this.views.delete(viewId));
-        this.viewOrder.delete(serverId);
-        this.lastActiveView.delete(serverId);
-
-        const index = this.serverOrder.findIndex((id) => id === serverId);
-        this.serverOrder.splice(index, 1);
-        this.remoteInfo.delete(serverId);
-        this.servers.delete(serverId);
-
-        this.persistServers();
-    }
-
-    setViewIsOpen = (viewId: string, isOpen: boolean) => {
-        const view = this.views.get(viewId);
-        if (!view) {
-            return;
-        }
-        view.isOpen = isOpen;
-
-        this.persistServers();
-    }
-
-    updateLastActive = (viewId: string) => {
-        const view = this.views.get(viewId);
-        if (!view) {
-            return;
-        }
-        this.lastActiveView.set(view.server.id, viewId);
-
-        const serverOrder = this.serverOrder.findIndex((srv) => srv === view.server.id);
-        if (serverOrder < 0) {
-            throw new Error('Server order corrupt, ID not found.');
-        }
-
-        this.persistServers(serverOrder);
-    }
-
-    reloadFromConfig = () => {
-        const serverOrder: string[] = [];
-        Config.predefinedServers.forEach((server) => {
-            const id = this.initServer(server, true);
-            serverOrder.push(id);
-        });
-        if (Config.enableServerManagement) {
-            Config.localServers.sort((a, b) => a.order - b.order).forEach((server) => {
-                const id = this.initServer(server, false);
-                serverOrder.push(id);
-            });
-        }
-        this.filterOutDuplicateServers();
-        this.serverOrder = serverOrder;
-    }
-
-    private filterOutDuplicateServers = () => {
-        const servers = [...this.servers.keys()].map((key) => ({key, value: this.servers.get(key)!}));
-        const uniqueServers = new Set();
-        servers.forEach((server) => {
-            if (uniqueServers.has(`${server.value.name}:${server.value.url}`)) {
-                this.servers.delete(server.key);
-            } else {
-                uniqueServers.add(`${server.value.name}:${server.value.url}`);
-            }
-        });
-    }
-
-    private initServer = (configServer: ConfigServer, isPredefined: boolean) => {
-        const server = new MattermostServer(configServer, isPredefined);
-        this.servers.set(server.id, server);
-
-        log.withPrefix(server.id).debug('initialized server');
-
-        const viewOrder: string[] = [];
-        configServer.tabs.sort((a, b) => a.order - b.order).forEach((view) => {
-            const mattermostView = this.getNewView(server, view.name, view.isOpen);
-            log.withPrefix(mattermostView.id).debug('initialized view');
-
-            this.views.set(mattermostView.id, mattermostView);
-            viewOrder.push(mattermostView.id);
-        });
-        this.viewOrder.set(server.id, viewOrder);
-        if (typeof configServer.lastActiveTab !== 'undefined') {
-            this.lastActiveView.set(server.id, viewOrder[configServer.lastActiveTab]);
-        }
-        return server.id;
-    }
-
-    private getFirstOpenViewForServer = (serverId: string) => {
-        const viewOrder = this.getOrderedTabsForServer(serverId);
-        const openViews = viewOrder.filter((view) => view.isOpen);
-        const firstView = openViews[0];
-        if (!firstView) {
-            throw new Error(`No views open for server id ${serverId}`);
-        }
-        return firstView;
-    }
-
-    private persistServers = async (lastActiveServer?: number) => {
-        this.emit(SERVERS_UPDATE);
-
-        const localServers = [...this.servers.values()].
-            reduce((servers, srv) => {
-                if (srv.isPredefined) {
-                    return servers;
-                }
-                servers.push(this.toConfigServer(srv));
-                return servers;
-            }, [] as ConfigServer[]);
-        await Config.setServers(localServers, lastActiveServer);
-    }
-
-    private getLastActiveView = (serverId: string) => {
-        let lastActiveView: number | undefined;
-        if (this.lastActiveView.has(serverId)) {
-            const index = this.viewOrder.get(serverId)?.indexOf(this.lastActiveView.get(serverId)!);
-            if (typeof index !== 'undefined' && index >= 0) {
-                lastActiveView = index;
-            }
-        }
-        return lastActiveView;
-    }
-
-    private toConfigServer = (server: MattermostServer): ConfigServer => {
-        return {
-            name: server.name,
-            url: `${server.url}`,
-            order: this.serverOrder.indexOf(server.id),
-            lastActiveTab: this.getLastActiveView(server.id),
-            tabs: this.viewOrder.get(server.id)?.reduce((views, viewId, index) => {
-                const view = this.views.get(viewId);
-                if (!view) {
-                    return views;
-                }
-                views.push({
-                    name: view?.type,
-                    order: index,
-                    isOpen: view.isOpen,
-                });
-                return views;
-            }, [] as ConfigView[]) ?? [],
-        };
-    }
-
-    private getNewView = (srv: MattermostServer, viewName: string, isOpen?: boolean) => {
-        switch (viewName) {
-        case TAB_MESSAGING:
-            return new MessagingView(srv, isOpen);
-        case TAB_FOCALBOARD:
-            return new FocalboardView(srv, isOpen);
-        case TAB_PLAYBOOKS:
-            return new PlaybooksView(srv, isOpen);
-        default:
-            throw new Error('Not implemeneted');
-        }
-    }
-
-    private updateServerURL = (serverId: string) => {
-        const server = this.servers.get(serverId);
-        const remoteInfo = this.remoteInfo.get(serverId);
-
-        if (!(server && remoteInfo)) {
-            return false;
-        }
-
-        if (remoteInfo.siteURL && server.url.toString() !== new URL(remoteInfo.siteURL).toString()) {
-            server.updateURL(remoteInfo.siteURL);
-            this.servers.set(serverId, server);
-            return true;
-        }
-        return false;
-    }
-
-    private openExtraViews = (serverId: string) => {
-        const server = this.servers.get(serverId);
-        const remoteInfo = this.remoteInfo.get(serverId);
-
-        if (!(server && remoteInfo)) {
-            return false;
-        }
-
-        if (!(remoteInfo.serverVersion && Utils.isVersionGreaterThanOrEqualTo(remoteInfo.serverVersion, '6.0.0'))) {
-            return false;
-        }
-
-        let hasUpdates = false;
-        const viewOrder = this.viewOrder.get(serverId);
-        if (viewOrder) {
-            viewOrder.forEach((viewId) => {
-                const view = this.views.get(viewId);
-                if (view) {
-                    if (view.type === TAB_PLAYBOOKS && remoteInfo.hasPlaybooks && typeof view.isOpen === 'undefined') {
-                        log.withPrefix(view.id).verbose('opening Playbooks');
-                        view.isOpen = true;
-                        this.views.set(viewId, view);
-                        hasUpdates = true;
-                    }
-                    if (view.type === TAB_FOCALBOARD && remoteInfo.hasFocalboard && typeof view.isOpen === 'undefined') {
-                        log.withPrefix(view.id).verbose('opening Boards');
-                        view.isOpen = true;
-                        this.views.set(viewId, view);
-                        hasUpdates = true;
-                    }
-                }
-            });
-        }
-        return hasUpdates;
-    }
-
-    private includeId = (id: string, ...prefixes: string[]) => {
-        const shouldInclude = ['debug', 'silly'].includes(getLevel());
-        return shouldInclude ? [id, ...prefixes] : prefixes;
+    getCurrentServerId = () => {
+        return this.currentServerId;
     };
 
     getServerLog = (serverId: string, ...additionalPrefixes: string[]) => {
@@ -424,15 +65,321 @@ export class ServerManager extends EventEmitter {
         if (!server) {
             return new Logger(serverId);
         }
-        return new Logger(...additionalPrefixes, ...this.includeId(serverId, server.name));
+        return new Logger(...additionalPrefixes, serverId);
     };
 
-    getViewLog = (viewId: string, ...additionalPrefixes: string[]) => {
-        const view = this.getView(viewId);
-        if (!view) {
-            return new Logger(viewId);
+    getRemoteInfo = (serverId: string) => {
+        return this.remoteInfo.get(serverId);
+    };
+
+    lookupServerByURL = (inputURL: URL | string, ignoreScheme = false, allowWebSocketProtocol = false) => {
+        log.silly('lookupViewByURL', {ignoreScheme});
+
+        const parsedURL = parseURL(inputURL);
+        if (!parsedURL) {
+            return undefined;
         }
-        return new Logger(...additionalPrefixes, ...this.includeId(viewId, view.server.name, view.type));
+        return this.getAllServers().find((server) => {
+            return isInternalURL(parsedURL, server.url, ignoreScheme, allowWebSocketProtocol) &&
+                getFormattedPathName(parsedURL.pathname).startsWith(getFormattedPathName(server.url.pathname));
+        });
+    };
+
+    addServer = (server: Server, initialLoadURL?: URL) => {
+        log.debug('addServer');
+
+        const mattermostServer = this.createServer(server, false, initialLoadURL);
+        this.addServerToMap(mattermostServer, true);
+        return mattermostServer;
+    };
+
+    setLoggedIn = (serverId: string, loggedIn: boolean) => {
+        const server = this.servers.get(serverId);
+        if (!server) {
+            return;
+        }
+        if (server.isLoggedIn === loggedIn) {
+            return;
+        }
+        if (!loggedIn) {
+            server.theme = undefined;
+        }
+        server.isLoggedIn = loggedIn;
+        this.servers.set(serverId, server);
+        this.emit(SERVER_LOGGED_IN_CHANGED, serverId, loggedIn);
+        if (!loggedIn) {
+            this.emit(SERVER_THEME_CHANGED, serverId);
+        }
+    };
+
+    private createServer = (server: Server, isPredefined: boolean, initialLoadURL?: URL) => {
+        let newServer = new MattermostServer(server, isPredefined, initialLoadURL);
+        while (this.servers.has(newServer.id)) {
+            newServer = new MattermostServer(server, isPredefined, initialLoadURL);
+        }
+        return newServer;
+    };
+
+    private addServerToMap = (newServer: MattermostServer, setAsCurrentServer: boolean, persist: boolean = true) => {
+        // This is the only place where we log the server name
+        log.debug('addServerToMap', newServer.id, newServer.name);
+
+        this.servers.set(newServer.id, newServer);
+        this.serverOrder.push(newServer.id);
+
+        if (setAsCurrentServer) {
+            this.currentServerId = newServer.id;
+        }
+
+        if (persist) {
+            this.persistServers();
+        }
+        this.emit(SERVER_ADDED, newServer.id, setAsCurrentServer);
+        return newServer;
+    };
+
+    editServer = (serverId: string, server: Server) => {
+        log.debug('editServer', {serverId});
+
+        const existingServer = this.servers.get(serverId);
+        if (!existingServer) {
+            log.warn('Server not found', {serverId});
+            return undefined;
+        }
+
+        if (existingServer.isPredefined) {
+            log.warn('Cannot edit predefined server', {serverId: existingServer.id});
+            return existingServer;
+        }
+
+        const events: string[] = [];
+        if (existingServer.url.toString() !== parseURL(server.url)?.toString()) {
+            // Emit this event whenever we update a server URL to ensure remote info is fetched
+            events.push(SERVER_URL_CHANGED);
+        }
+        if (existingServer.name !== server.name) {
+            events.push(SERVER_NAME_CHANGED);
+        }
+
+        existingServer.name = server.name;
+        existingServer.updateURL(server.url);
+        this.servers.set(serverId, existingServer);
+
+        this.persistServers();
+        events.forEach((event) => this.emit(event, serverId));
+        return existingServer;
+    };
+
+    updateRemoteInfo = (serverId: string, remoteInfo: RemoteInfo, isSiteURLValidated?: boolean) => {
+        log.debug('updateRemoteInfo', {serverId});
+
+        const server = this.servers.get(serverId);
+        if (!server) {
+            return;
+        }
+
+        this.remoteInfo.set(serverId, remoteInfo);
+
+        const siteURL = remoteInfo.siteURL ? parseURL(remoteInfo.siteURL) : undefined;
+        if (siteURL && server.url.toString() !== siteURL.toString() && isSiteURLValidated) {
+            server.updateURL(siteURL);
+            this.servers.set(serverId, server);
+            this.emit(SERVER_URL_CHANGED, serverId);
+            this.persistServers();
+        }
+    };
+
+    updatePreAuthSecret = (serverId: string, preAuthSecret: string) => {
+        log.debug('updatePreAuthSecret', {serverId});
+        const server = this.servers.get(serverId);
+        if (!server) {
+            return;
+        }
+        server.preAuthSecret = preAuthSecret;
+        this.servers.set(serverId, server);
+        this.emit(SERVER_PRE_AUTH_SECRET_CHANGED, serverId);
+    };
+
+    updateTheme = (serverId: string, theme: Theme) => {
+        log.debug('updateTheme', {theme});
+        const server = this.servers.get(serverId);
+        if (!server) {
+            return;
+        }
+        if (!server.isLoggedIn) {
+            return;
+        }
+        server.theme = {
+            ...theme,
+            isUsingSystemTheme: theme.isUsingSystemTheme ?? server.theme?.isUsingSystemTheme,
+        };
+        this.servers.set(serverId, server);
+        this.emit(SERVER_THEME_CHANGED, serverId);
+    };
+
+    updateServerOrder = (serverOrder: string[], persist = true) => {
+        log.debug('updateServerOrder', {serverOrder});
+
+        this.serverOrder = serverOrder;
+        if (persist) {
+            this.persistServers();
+        }
+        this.emit(SERVER_ORDER_UPDATED, serverOrder);
+    };
+
+    // Remove setCurrentServer method since we only need to persist changes when switching or removing servers
+    updateCurrentServer = (serverId: string, persist = true) => {
+        log.debug('updateCurrentServer', {serverId});
+
+        if (this.currentServerId === serverId) {
+            return;
+        }
+
+        this.currentServerId = serverId;
+        this.emit(SERVER_SWITCHED, serverId);
+        if (persist) {
+            this.persistServers();
+        }
+    };
+
+    removeServer = (serverId: string, persist = true) => {
+        log.debug('removeServer', {serverId});
+
+        const server = this.servers.get(serverId);
+        if (!server) {
+            return;
+        }
+
+        let nextServer;
+        if (this.currentServerId === serverId) {
+            const orderedServers = this.getOrderedServers();
+            const currentIndex = orderedServers.findIndex((server) => server.id === serverId);
+            nextServer = orderedServers[currentIndex - 1]?.id || orderedServers[currentIndex + 1]?.id || orderedServers[0]?.id;
+        }
+
+        const index = this.serverOrder.findIndex((id) => id === serverId);
+        if (index !== -1) {
+            this.serverOrder.splice(index, 1);
+        }
+        this.remoteInfo.delete(serverId);
+        this.servers.delete(serverId);
+
+        if (nextServer) {
+            this.updateCurrentServer(nextServer, persist);
+        }
+
+        this.emit(SERVER_REMOVED, server);
+        if (persist) {
+            this.persistServers();
+        }
+    };
+
+    reloadServer = (serverId: string) => {
+        log.debug('reloadServer', {serverId});
+
+        const server = this.servers.get(serverId);
+        if (!server) {
+            return;
+        }
+        const wasCurrent = this.currentServerId === serverId;
+        const originalIndex = this.serverOrder.findIndex((id) => id === serverId);
+
+        // A reload is remove-then-re-add of the same server, so none of the
+        // intermediate steps should reach disk.
+        this.removeServer(serverId, false);
+        const newServer = this.addServerToMap(server, wasCurrent, false);
+        if (wasCurrent) {
+            this.updateCurrentServer(newServer.id, false);
+        }
+
+        // Move the serverId back to its original position in serverOrder using updateServerOrder
+        const newIdx = this.serverOrder.findIndex((id) => id === newServer.id);
+        if (newIdx !== -1 && newIdx !== originalIndex) {
+            const newOrder = [...this.serverOrder];
+            newOrder.splice(newIdx, 1);
+            newOrder.splice(originalIndex, 0, newServer.id);
+            this.updateServerOrder(newOrder, false);
+        }
+
+        this.persistServers();
+    };
+
+    init = () => {
+        this.servers.clear();
+        this.remoteInfo.clear();
+        this.serverOrder = [];
+        this.currentServerId = undefined;
+
+        // Add the servers from the config
+        let initialServers: MattermostServer[] = [];
+
+        // Add the unordered predefined servers first
+        const unorderedPredefinedServers = Config.predefinedServers.filter((server) =>
+            !Config.localServers.some((localServer) =>
+                localServer.isPredefined && parseURL(localServer.url)?.toString() === parseURL(server.url)?.toString()));
+
+        // Then add the rest of the servers, sorted by order
+        const restOfServers: ConfigServer[] = [];
+        if (Config.enableServerManagement) {
+            restOfServers.push(...Config.localServers.filter((server) => !server.isPredefined));
+        }
+        restOfServers.push(
+            ...Config.localServers.map((server) => {
+                if (!server.isPredefined) {
+                    return undefined;
+                }
+                const predefinedServer = Config.predefinedServers.find((predefinedServer) =>
+                    parseURL(predefinedServer.url)?.toString() === parseURL(server.url)?.toString());
+                if (!predefinedServer) {
+                    return undefined;
+                }
+                return {
+                    ...server,
+                    name: predefinedServer.name,
+                };
+            }).filter((server): server is ConfigServer => server !== undefined),
+        );
+        restOfServers.sort((a, b) => a.order - b.order);
+
+        unorderedPredefinedServers.forEach((server) => {
+            initialServers.push(this.createServer(server, true));
+        });
+        restOfServers.forEach((server) => {
+            initialServers.push(this.createServer(server, server.isPredefined ?? false));
+        });
+
+        initialServers = this.filterOutDuplicateServers(initialServers);
+
+        // Set the current server based on config if the user last used a local server
+        // Otherwise, just use the first server
+        let currentServerIndex = Config.lastActiveServer ?? 0;
+        if (currentServerIndex > initialServers.length - 1) {
+            currentServerIndex = initialServers.length - 1;
+        }
+
+        initialServers.forEach((server, index) => this.addServerToMap(server, currentServerIndex === index, false));
+        this.persistServers();
+    };
+
+    private filterOutDuplicateServers = (servers: MattermostServer[]) => {
+        const uniqueServers = new Map<string, MattermostServer>();
+        servers.forEach((server) => {
+            if (!uniqueServers.has(`${server.url.toString()}`) || server.isPredefined) {
+                uniqueServers.set(`${server.url.toString()}`, server);
+            }
+        });
+        return [...uniqueServers.values()];
+    };
+
+    private persistServers = () => {
+        const localServers = [...this.servers.values()].
+            map((srv) => ({
+                name: srv.name,
+                url: srv.url.toString(),
+                isPredefined: srv.isPredefined,
+                order: this.serverOrder.indexOf(srv.id),
+            }));
+        Config.setServers(localServers, this.currentServerId ? this.getOrderedServers().findIndex((server) => server.id === this.currentServerId) : undefined);
     };
 }
 

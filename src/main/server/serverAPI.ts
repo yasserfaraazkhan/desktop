@@ -1,16 +1,26 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
+import type {Session} from 'electron';
 import {net, session} from 'electron';
 
 import {COOKIE_NAME_AUTH_TOKEN, COOKIE_NAME_CSRF, COOKIE_NAME_USER_ID} from 'common/constants';
 import {Logger} from 'common/log';
 
+import type {ErrorReason} from 'types/server';
+
 const log = new Logger('serverAPI');
 
-export async function getServerAPI<T>(url: URL, isAuthenticated: boolean, onSuccess?: (data: T) => void, onAbort?: () => void, onError?: (error: Error) => void) {
+export async function getServerAPI(
+    url: URL,
+    isAuthenticated: boolean,
+    onSuccess?: (raw: string) => void,
+    onAbort?: () => void,
+    onError?: (error: Error, errorReason?: ErrorReason) => void,
+    requestSession: Session = session.defaultSession,
+) {
     if (isAuthenticated) {
-        const cookies = await session.defaultSession.cookies.get({});
+        const cookies = await requestSession.cookies.get({});
         if (!cookies) {
             log.error('Cannot authenticate, no cookies present');
             return;
@@ -25,30 +35,29 @@ export async function getServerAPI<T>(url: URL, isAuthenticated: boolean, onSucc
 
         if (!userId || !csrf || !authToken) {
             // Missing cookies needed for req
-            log.error(`Cannot authenticate, required cookies for ${url.origin} not found`);
+            log.error('Cannot authenticate, required cookies not found');
             return;
         }
     }
 
     const req = net.request({
         url: url.toString(),
-        session: session.defaultSession,
+        session: requestSession,
         useSessionCookies: true,
     });
 
     if (onSuccess) {
         req.on('response', (response: Electron.IncomingMessage) => {
-            log.silly('response', response);
+            log.silly('response');
             if (response.statusCode === 200) {
                 let raw = '';
                 response.on('data', (chunk: Buffer) => {
-                    log.silly('response.data', `${chunk}`);
+                    log.silly('response.data');
                     raw += `${chunk}`;
                 });
                 response.on('end', () => {
                     try {
-                        const data = JSON.parse(raw) as T;
-                        onSuccess(data);
+                        onSuccess(raw);
                     } catch (e) {
                         const error = `Error parsing server data from ${url.toString()}`;
                         log.error(error);
@@ -56,7 +65,13 @@ export async function getServerAPI<T>(url: URL, isAuthenticated: boolean, onSucc
                     }
                 });
             } else {
-                onError?.(new Error(`Bad status code requesting from ${url.toString()}`));
+                onError?.(
+                    new Error(`Bad status code ${response.statusCode} requesting from ${url.toString()}`),
+                    {
+                        needsBasicAuth: response.statusCode === 401 && response.headers['www-authenticate']?.includes('Basic'),
+                        needsPreAuth: response.statusCode === 403 && response.headers['x-reject-reason']?.includes('pre-auth'),
+                    },
+                );
             }
             response.on('error', onError || (() => {}));
         });
@@ -65,7 +80,9 @@ export async function getServerAPI<T>(url: URL, isAuthenticated: boolean, onSucc
         req.on('abort', onAbort);
     }
     if (onError) {
-        req.on('error', onError);
+        req.on('error', (error) => {
+            onError(error, {needsClientCert: error.message.includes('ERR_SSL_CLIENT_AUTH_CERT_NEEDED')});
+        });
     }
     req.end();
 }

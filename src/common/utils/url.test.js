@@ -2,6 +2,7 @@
 // See LICENSE.txt for license information.
 'use strict';
 
+import {MAX_URL_LENGTH} from 'common/constants';
 import {
     getFormattedPathName,
     isUrlType,
@@ -9,30 +10,15 @@ import {
     isValidURI,
     parseURL,
     isInternalURL,
-    isCustomLoginURL,
     isCallsPopOutURL,
     isTrustedURL,
 } from 'common/utils/url';
 
-jest.mock('common/views/View', () => ({
-    getServerView: (srv, view) => {
-        return {
-            name: `${srv.name}_${view.name}`,
-            url: `${srv.url}${srv.url.toString().endsWith('/') ? '' : '/'}${view.name.split('-')[1] || ''}`,
-        };
-    },
-}));
-
 describe('common/utils/url', () => {
     describe('getFormattedPathName', () => {
-        it('should format all to lower case', () => {
-            const unformattedPathName = '/aAbBbB/cC/DdeR/';
-            expect(getFormattedPathName(unformattedPathName)).toBe('/aabbbb/cc/dder/');
-        });
-
         it('should add trailing slash', () => {
             const unformattedPathName = '/aAbBbB/cC/DdeR';
-            expect(getFormattedPathName(unformattedPathName)).toBe('/aabbbb/cc/dder/');
+            expect(getFormattedPathName(unformattedPathName)).toBe('/aAbBbB/cC/DdeR/');
         });
     });
     describe('parseURL', () => {
@@ -51,6 +37,45 @@ describe('common/utils/url', () => {
             const parsedURL = parseURL(urlWithExtraSlashes);
 
             expect(parsedURL.toString()).toBe('https://mattermost.com/sub/path/example');
+        });
+
+        it('should preserve triple slashes for non-special schemes', () => {
+            const onenoteUrl = 'onenote:///D:/OneNote/Test.one#section';
+            const parsedURL = parseURL(onenoteUrl);
+
+            expect(parsedURL).toBeDefined();
+            expect(parsedURL.protocol).toBe('onenote:');
+            expect(parsedURL.toString()).toBe(onenoteUrl);
+        });
+
+        it('should preserve file:/// URLs', () => {
+            const fileUrl = 'file:///C:/Users/test.txt';
+            const parsedURL = parseURL(fileUrl);
+
+            expect(parsedURL).toBeDefined();
+            expect(parsedURL.protocol).toBe('file:');
+            expect(parsedURL.toString()).toBe(fileUrl);
+        });
+
+        it('should reject URLs with literal null bytes', () => {
+            expect(parseURL('customproto:///path\x00malicious')).toBeUndefined();
+        });
+
+        it('should reject URLs with percent-encoded null bytes', () => {
+            expect(parseURL('customproto:///path%00malicious')).toBeUndefined();
+        });
+
+        it('should reject URLs longer than the maximum allowed length', () => {
+            const oversizedURL = `http://example.com/${'A'.repeat(MAX_URL_LENGTH)}`;
+            expect(parseURL(oversizedURL)).toBeUndefined();
+        });
+
+        it('should accept URLs at exactly the maximum allowed length', () => {
+            const prefix = 'http://example.com/';
+            const padding = 'A'.repeat(MAX_URL_LENGTH - prefix.length);
+            const maxLengthURL = `${prefix}${padding}`;
+            expect(maxLengthURL.length).toBe(MAX_URL_LENGTH);
+            expect(parseURL(maxLengthURL)).toBeDefined();
         });
     });
 
@@ -102,6 +127,7 @@ describe('common/utils/url', () => {
             expect(isValidURI(testURL)).toBe(false);
         });
     });
+
     describe('isInternalURL', () => {
         it('should return false on different hosts', () => {
             const baseURL = new URL('http://mattermost.com');
@@ -149,6 +175,25 @@ describe('common/utils/url', () => {
             const url1 = new URL('http://server-1.com');
             const url2 = new URL('mattermost://server-1.com');
             expect(isInternalURL(url1, url2, true)).toBe(true);
+        });
+
+        it('should return false for http target on an https server', () => {
+            const baseURL = new URL('https://mattermost.com/');
+            const externalURL = new URL('http://mattermost.com/plugins/x');
+
+            expect(isInternalURL(externalURL, baseURL)).toBe(false);
+        });
+
+        it('should allow web socket protocol equivalent', () => {
+            const baseURL = new URL('https://mattermost.com/');
+            const externalURL = new URL('wss://mattermost.com/plugins/x');
+            expect(isInternalURL(externalURL, baseURL, false, true)).toBe(true);
+        });
+
+        it('should not allow web socket protocol equivalent when security is different', () => {
+            const baseURL = new URL('https://mattermost.com/');
+            const externalURL = new URL('ws://mattermost.com/plugins/x');
+            expect(isInternalURL(externalURL, baseURL, false, true)).toBe(false);
         });
     });
     describe('isTrustedURL', () => {
@@ -206,45 +251,6 @@ describe('common/utils/url', () => {
         it('should not identify other url', () => {
             const adminURL = new URL('http://mattermost.com/some/other/path');
             expect(isUrlType('url-type', serverURL, adminURL)).toBe(false);
-        });
-    });
-
-    describe('isCustomLoginURL', () => {
-        it('should match correct URL', () => {
-            expect(isCustomLoginURL(
-                new URL('http://server.com/oauth/authorize'),
-                new URL('http://server.com'),
-            )).toBe(true);
-        });
-        it('should not match incorrect URL', () => {
-            expect(isCustomLoginURL(
-                new URL('http://server.com/oauth/notauthorize'),
-                new URL('http://server.com'),
-            )).toBe(false);
-        });
-        it('should not match base URL', () => {
-            expect(isCustomLoginURL(
-                new URL('http://server.com/'),
-                new URL('http://server.com'),
-            )).toBe(false);
-        });
-        it('should match with subpath', () => {
-            expect(isCustomLoginURL(
-                new URL('http://server.com/subpath/oauth/authorize'),
-                new URL('http://server.com/subpath'),
-            )).toBe(true);
-        });
-        it('should not match with different subpath', () => {
-            expect(isCustomLoginURL(
-                new URL('http://server.com/subpath/oauth/authorize'),
-                new URL('http://server.com/different/subpath'),
-            )).toBe(false);
-        });
-        it('should not match with oauth subpath', () => {
-            expect(isCustomLoginURL(
-                new URL('http://server.com/oauth/authorize'),
-                new URL('http://server.com/oauth/authorize'),
-            )).toBe(false);
         });
     });
 

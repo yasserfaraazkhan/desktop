@@ -30,28 +30,23 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: nightly/checkout-repo
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.REFERENCE }}
       - name: nightly/setup-node
-        uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: "package.json"
+          node-version-file: ".nvmrc"
           cache: "npm"
           cache-dependency-path: package-lock.json
-      - name: nightly/optimize
-        shell: powershell
-        run: ./scripts/Makefile.ps1 optimize
       - name: nightly/install-deps
         shell: powershell
         run: |
-          ./scripts/Makefile.ps1 install-deps
           choco install yq --version 4.15.1 -y
           npm i -g node-gyp
           node-gyp install
           node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers"
           node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers" --arch arm64
-          node-gyp install --devdir="C:\Users\runneradmin\.electron-gyp" --target=$(jq -r .devDependencies.electron package.json) --dist-url="https://electronjs.org/headers" --arch ia32
           npm ci --openssl_fips=''
       - name: nightly/test
         uses: ./.github/actions/test
@@ -59,61 +54,66 @@ jobs:
         shell: powershell
         env:
           MM_WIN_INSTALLERS: 1
-          PFX_KEY: ${{ secrets.MM_DESKTOP_MSI_INSTALLER_PFX_KEY }}
-          CSC_KEY_PASSWORD: ${{ secrets.MM_DESKTOP_MSI_INSTALLER_CSC_KEY_PASSWORD }}
-          PFX: ${{ secrets.MM_DESKTOP_MSI_INSTALLER_PFX }}
-          CSC_LINK: ${{ secrets.MM_DESKTOP_MSI_INSTALLER_CSC_LINK }}
-        run: ./scripts/Makefile.ps1 build
+          AZURE_CLIENT_ID: ${{ secrets.MM_DESKTOP_MSI_INSTALLER_AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.MM_DESKTOP_MSI_INSTALLER_AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.MM_DESKTOP_MSI_INSTALLER_AZURE_TENANT_ID }}
+        run: npm run package:windows-msi
       - name: nightly/package
         run: |
           mkdir -p ./build/win
-          bash -x ./scripts/patch_updater_yml.sh
           bash -x ./scripts/cp_artifacts.sh release ./build/win
       - name: nightly/upload-build
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: build-rainforest
+          name: build-rainforest-${{ runner.os }}
           path: ./build
+          compression-level: 0
           retention-days: 5 ## No need to keep them since they are uploaded on S3
 
   build-mac-installer:
-    runs-on: macos-12
+    runs-on: macos-15
+    env:
+      MACOS_NOTIFICATION_STATE_NO_SDK_CHECK: true
     steps:
       - name: nightly/checkout-repo
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.REFERENCE }}
       - name: nightly/setup-node
-        uses: actions/setup-node@64ed1c7eab4cce3362f8c340dee64e5eaeef8f7c # v3.6.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: "package.json"
+          node-version-file: ".nvmrc"
           cache: "npm"
           cache-dependency-path: package-lock.json
       - name: nightly/install-dependencies
         run: |
           brew install yq rename
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
           npm ci
       - name: nightly/test
         uses: ./.github/actions/test
       - name: nightly/build
         env:
-          APPLEID: ${{ secrets.MM_DESKTOP_MAC_INSTALLER_APPLE_ID }}
-          APPLEIDPASS: ${{ secrets.MM_DESKTOP_MAC_INSTALLER_APPLE_ID_PASS }}
+          APPLE_API_KEY_ID: ${{ secrets.MM_DESKTOP_MAC_APP_STORE_MACOS_API_KEY_ID }}
+          APPLE_API_KEY_RAW: ${{ secrets.MM_DESKTOP_MAC_APP_STORE_MACOS_API_KEY }}
+          APPLE_API_KEY: "./key.p8"
+          APPLE_API_ISSUER: ${{ secrets.MM_DESKTOP_MAC_APP_STORE_MACOS_API_ISSUER_ID }}
           CSC_FOR_PULL_REQUEST: true
           CSC_KEY_PASSWORD: ${{ secrets.MM_DESKTOP_MAC_INSTALLER_CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.MM_DESKTOP_MAC_INSTALLER_CSC_LINK }}
+          MAC_PROFILE: ${{ secrets.MM_DESKTOP_MAC_INSTALLER_DMG_PROFILE }}
         run: |
+          echo $MAC_PROFILE | base64 -D > ./mac.provisionprofile
+          zsh -c 'echo -n $APPLE_API_KEY_RAW > ./key.p8'
           mkdir -p ./build/macos
           npm run package:mac-with-universal
-          bash -x ./scripts/patch_updater_yml.sh
           bash -x ./scripts/cp_artifacts.sh release ./build/macos
-      - name: nightly/rename-arm64-to-m1
-        run: rename 's/arm64/m1/' ./build/macos/$(jq -r .version package.json)/*
       - name: nightly/upload-build
-        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: build-rainforest
+          name: build-rainforest-${{ runner.os }}
           path: ./build
+          compression-level: 0
           retention-days: 5 ## No need to keep them since they are uploaded on S3
 
   upload-to-s3-daily:
@@ -123,20 +123,21 @@ jobs:
       - build-msi-installer
     steps:
       - name: nightly/checkout-repo
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.REFERENCE }}
       - name: nightly/setup-aws-credentials
-        uses: aws-actions/configure-aws-credentials@67fbcbb121271f7775d2e7715933280b06314838 # v1.7.0
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           aws-region: us-east-1
           aws-access-key-id: ${{ secrets.MM_DESKTOP_DAILY_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.MM_DESKTOP_DAILY_AWS_SECRET_ACCESS_KEY }}
       - name: nightly/download-builds
-        uses: actions/download-artifact@9bc31d5ccc31df68ecc42ccf4149144866c47d8a # v3.0.2
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: build-rainforest
           path: build
+          pattern: build-rainforest-*
+          merge-multiple: true
       - name: nightly/install-missing-deps
         run: |
           sudo apt-get update

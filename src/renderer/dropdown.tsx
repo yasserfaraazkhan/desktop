@@ -1,33 +1,36 @@
 // Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
 // See LICENSE.txt for license information.
 
+import classNames from 'classnames';
 import React from 'react';
+import type {DraggingStyle, DropResult, NotDraggingStyle} from 'react-beautiful-dnd';
+import {DragDropContext, Draggable, Droppable} from 'react-beautiful-dnd';
 import ReactDOM from 'react-dom';
 import {FormattedMessage} from 'react-intl';
-import classNames from 'classnames';
-import {DragDropContext, Draggable, DraggingStyle, Droppable, DropResult, NotDraggingStyle} from 'react-beautiful-dnd';
-
-import {UniqueServer} from 'types/config';
 
 import {TAB_BAR_HEIGHT, THREE_DOT_MENU_WIDTH_MAC} from 'common/utils/constants';
+
+import type {UniqueServer} from 'types/config';
 
 import './css/dropdown.scss';
 
 import IntlProvider from './intl_provider';
+import setupDarkMode from './modals/darkMode';
+
+setupDarkMode();
 
 type State = {
     servers?: UniqueServer[];
     serverOrder?: string[];
     orderedServers?: UniqueServer[];
     activeServer?: string;
-    darkMode?: boolean;
     enableServerManagement?: boolean;
     unreads?: Map<string, boolean>;
     mentions?: Map<string, number>;
     expired?: Map<string, boolean>;
-    hasGPOServers?: boolean;
     isAnyDragging: boolean;
     windowBounds?: Electron.Rectangle;
+    nonce?: string;
 }
 
 function getStyle(style?: DraggingStyle | NotDraggingStyle) {
@@ -60,11 +63,9 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
 
     handleUpdate = (
         servers: UniqueServer[],
-        darkMode: boolean,
         windowBounds: Electron.Rectangle,
         activeServer?: string,
         enableServerManagement?: boolean,
-        hasGPOServers?: boolean,
         expired?: Map<string, boolean>,
         mentions?: Map<string, number>,
         unreads?: Map<string, boolean>,
@@ -72,15 +73,13 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
         this.setState({
             servers,
             activeServer,
-            darkMode,
             enableServerManagement,
-            hasGPOServers,
             unreads,
             mentions,
             expired,
             windowBounds,
         });
-    }
+    };
 
     selectServer = (server: UniqueServer) => {
         return () => {
@@ -90,31 +89,31 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
             window.desktop.serverDropdown.switchServer(server.id);
             this.closeMenu();
         };
-    }
+    };
 
     closeMenu = () => {
         if (!this.state.isAnyDragging) {
             (document.activeElement as HTMLElement).blur();
             window.desktop.closeServersDropdown();
         }
-    }
+    };
 
     preventPropagation = (event: React.MouseEvent<HTMLDivElement>) => {
         event.stopPropagation();
-    }
+    };
 
     addServer = () => {
         window.desktop.serverDropdown.showNewServerModal();
         this.closeMenu();
-    }
+    };
 
     isActiveServer = (server: UniqueServer) => {
         return server.id === this.state.activeServer;
-    }
+    };
 
     onDragStart = () => {
         this.setState({isAnyDragging: true});
-    }
+    };
 
     onDragEnd = (result: DropResult) => {
         const removedIndex = result.source.index;
@@ -134,12 +133,16 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
 
         this.setState({servers: serversCopy, isAnyDragging: false});
         window.desktop.updateServerOrder(serversCopy.map((server) => server.id!));
-    }
+    };
 
     componentDidMount() {
-        window.desktop.serverDropdown.requestInfo();
         window.addEventListener('click', this.closeMenu);
         window.addEventListener('keydown', this.handleKeyboardShortcuts);
+        window.desktop.getNonce().then((nonce) => {
+            this.setState({nonce}, () => {
+                window.desktop.serverDropdown.requestInfo();
+            });
+        });
     }
 
     componentDidUpdate() {
@@ -156,7 +159,7 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
             this.addButtonRef(serverIndex, ref);
             refMethod?.(ref);
         };
-    }
+    };
 
     addButtonRef = (serverIndex: number, ref: HTMLButtonElement | null) => {
         if (ref) {
@@ -168,7 +171,7 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
                 this.focusedIndex = null;
             });
         }
-    }
+    };
 
     handleKeyboardShortcuts = (event: KeyboardEvent) => {
         if (event.key === 'ArrowDown') {
@@ -195,24 +198,21 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
                 button.focus();
             }
         });
-    }
+    };
 
     handleClickOnDragHandle = (event: React.MouseEvent<HTMLDivElement>) => {
         if (this.state.isAnyDragging) {
             event.stopPropagation();
         }
-    }
+    };
 
     editServer = (serverId: string) => {
-        if (this.serverIsPredefined(serverId)) {
-            return () => {};
-        }
         return (event: React.MouseEvent<HTMLButtonElement>) => {
             event.stopPropagation();
             window.desktop.serverDropdown.showEditServerModal(serverId);
             this.closeMenu();
         };
-    }
+    };
 
     removeServer = (serverId: string) => {
         if (this.serverIsPredefined(serverId)) {
@@ -223,20 +223,22 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
             window.desktop.serverDropdown.showRemoveServerModal(serverId);
             this.closeMenu();
         };
-    }
+    };
 
     serverIsPredefined = (serverId: string) => {
         return this.state.servers?.some((server) => server.id === serverId && server.isPredefined);
-    }
+    };
 
     render() {
+        if (!this.state.nonce) {
+            return null;
+        }
+
         return (
             <IntlProvider>
                 <div
                     onClick={this.preventPropagation}
-                    className={classNames('ServerDropdown', {
-                        darkMode: this.state.darkMode,
-                    })}
+                    className='ServerDropdown'
                     style={{
                         maxHeight: this.state.windowBounds ? (this.state.windowBounds.height - TAB_BAR_HEIGHT - 16) : undefined,
                         maxWidth: this.state.windowBounds ? (this.state.windowBounds.width - THREE_DOT_MENU_WIDTH_MAC) : undefined,
@@ -255,11 +257,12 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
                     </div>
                     <hr className='ServerDropdown__divider'/>
                     <DragDropContext
+                        nonce={this.state.nonce}
                         onDragStart={this.onDragStart}
                         onDragEnd={this.onDragEnd}
                     >
                         <Droppable
-                            isDropDisabled={this.state.hasGPOServers}
+                            isDropDisabled={!this.state.enableServerManagement}
                             droppableId='ServerDropdown__droppable'
                         >
                             {(provided) => (
@@ -323,23 +326,25 @@ class ServerDropdown extends React.PureComponent<Record<string, never>, State> {
                                                             {this.isActiveServer(server) ? <i className='icon-check'/> : <i className='icon-server-variant'/>}
                                                             <span>{server.name}</span>
                                                         </div>
-                                                        {!server.isPredefined && <div className='ServerDropdown__indicators'>
+                                                        <div className='ServerDropdown__indicators'>
                                                             <button
                                                                 className='ServerDropdown__button-edit'
                                                                 onClick={this.editServer(server.id!)}
                                                             >
                                                                 <i className='icon-pencil-outline'/>
                                                             </button>
-                                                            <button
-                                                                className='ServerDropdown__button-remove'
-                                                                onClick={this.removeServer(server.id!)}
-                                                            >
-                                                                <i className='icon-trash-can-outline'/>
-                                                            </button>
+                                                            {!server.isPredefined &&
+                                                                <button
+                                                                    className='ServerDropdown__button-remove'
+                                                                    onClick={this.removeServer(server.id!)}
+                                                                >
+                                                                    <i className='icon-trash-can-outline'/>
+                                                                </button>
+                                                            }
                                                             {badgeDiv && <div className='ServerDropdown__badge'>
                                                                 {badgeDiv}
                                                             </div>}
-                                                        </div>}
+                                                        </div>
                                                     </button>
                                                 )}
                                             </Draggable>

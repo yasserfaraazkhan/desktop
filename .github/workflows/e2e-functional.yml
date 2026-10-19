@@ -1,0 +1,593 @@
+name: Electron Playwright Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        type: string
+        description: "Desktop Version. It can be a branch name or a tag or a commit SHA"
+        required: true
+      instance_details:
+        type: string
+        description: "JSON array of platform details"
+        required: false
+      MM_TEST_USER_NAME:
+        description: "The admin username of the test instance"
+        required: false
+        type: string
+      MM_TEST_PASSWORD:
+        description: "The admin password of the test instance"
+        required: false
+        type: string
+      MM_SERVER_VERSION:
+        type: string
+        description: "The server version to test against"
+        required: true
+      run_type:
+        type: string
+        description: "Run type for test reporting (PR / MASTER). Matterwick sends MASTER for master pushes; PR-label runs leave this blank (default PR)."
+        required: false
+        default: ""
+      pr_number:
+        type: string
+        description: "PR number, used to remove the E2E label from the PR after tests complete. Dispatchers should set this for PR runs."
+        required: false
+
+# Least-privilege default. Jobs that need more (status checks, PR writes) grant it explicitly
+# at the job level so that jobs running untrusted PR code do not inherit write scopes.
+permissions:
+  contents: read
+
+# Cancel superseded PR runs. Master runs are keyed by SHA and never cancelled,
+# so a newer merge cannot cancel the previous commit's results.
+concurrency:
+  group: e2e-functional-${{ inputs.pr_number || github.sha }}
+  cancel-in-progress: ${{ inputs.pr_number != '' }}
+
+jobs:
+  # TSIO reporting model (PR / master / release):
+  #   1 workflow run  →  1 composite_identity (gh_run_id + resolved commit SHA + name)
+  #   →  1 TSIO report group aggregating every platform leg + both policy legs.
+  # Matterwick sets run_type=MASTER for master pushes; PR runs default to desktop-pr.
+  prepare-matrix:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.instance_details != '' }}
+    runs-on: ubuntu-latest
+    outputs:
+      platforms: ${{ steps.generate.outputs.platforms }}
+      linux: ${{ steps.generate.outputs.linux }}
+      macos: ${{ steps.generate.outputs.macos }}
+      windows: ${{ steps.generate.outputs.windows }}
+      linux-shard-count: ${{ steps.generate.outputs.linux-shard-count }}
+      macos-shard-count: ${{ steps.generate.outputs.macos-shard-count }}
+      windows-shard-count: ${{ steps.generate.outputs.windows-shard-count }}
+      linux-runner: ${{ steps.generate.outputs.linux-runner }}
+      macos-runner: ${{ steps.generate.outputs.macos-runner }}
+      windows-runner: ${{ steps.generate.outputs.windows-runner }}
+      desktop-sha: ${{ steps.resolve-sha.outputs.sha }}
+      tsio-composite-identity: ${{ steps.tsio-identity.outputs.composite-identity-json }}
+      tsio-total-reports-expected: ${{ steps.tsio-identity.outputs.total-reports-expected }}
+    steps:
+      # Checkout first so generate can load e2e/utils/github-actions.js for shard counts.
+      - name: e2e/checkout-desktop-version
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.version_name }}
+
+      - id: resolve-sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - id: generate
+        env:
+          INSTANCE_DETAILS: ${{ inputs.instance_details }}
+        run: |
+          # Matterwick still dispatches macos-latest; pin explicitly so the job
+          # does not drift when GitHub retargets that label to macOS 26.
+          # Normalize platform to canonical linux|macos|windows (derive from runner
+          # when needed) so job names and e2e/<os> statuses stay consistent.
+          platforms=$(echo "${INSTANCE_DETAILS}" | jq -c '
+            map(
+              (if .runner == "macos-latest" then .runner = "macos-26" else . end) |
+              . as $row |
+              ($row.platform // $row.os // "") as $raw |
+              (
+                if $raw == "linux" or $raw == "macos" or $raw == "windows" then $raw
+                elif (($row.runner // "") | test("^(ubuntu|linux)")) then "linux"
+                elif (($row.runner // "") | test("^(macos|darwin)")) then "macos"
+                elif (($row.runner // "") | test("^windows")) then "windows"
+                else null
+                end
+              ) as $canon |
+              if $canon == null then empty
+              else ($row | .platform = $canon | del(.os))
+              end
+            )
+          ')
+          if [ "$(echo "${platforms}" | jq 'length')" -eq 0 ]; then
+            echo "No supported platforms in instance_details (need linux|macos|windows)" >&2
+            exit 1
+          fi
+          echo "platforms=${platforms}" >> "$GITHUB_OUTPUT"
+          PLATFORMS="${platforms}" node --input-type=commonjs <<'NODE'
+          const fs = require('fs');
+          const {prepareE2eMatrix} = require('./e2e/utils/github-actions.js');
+          const matrix = prepareE2eMatrix(JSON.parse(process.env.PLATFORMS));
+          const lines = [
+            `linux=${JSON.stringify(matrix.linux)}`,
+            `macos=${JSON.stringify(matrix.macos)}`,
+            `windows=${JSON.stringify(matrix.windows)}`,
+            `linux-shard-count=${matrix.linuxShardCount}`,
+            `macos-shard-count=${matrix.macosShardCount}`,
+            `windows-shard-count=${matrix.windowsShardCount}`,
+            `linux-runner=${matrix.linuxRunner}`,
+            `macos-runner=${matrix.macosRunner}`,
+            `windows-runner=${matrix.windowsRunner}`,
+            `total-reports-expected=${matrix.totalReportsExpected}`,
+          ];
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join('\n')}\n`);
+          NODE
+
+      - id: tsio-identity
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          MM_SHA: ${{ steps.resolve-sha.outputs.sha }}
+          MM_BRANCH: ${{ inputs.version_name }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          RUN_TYPE: ${{ inputs.run_type || 'PR' }}
+          TOTAL_REPORTS_EXPECTED: ${{ steps.generate.outputs.total-reports-expected }}
+        run: |
+          echo "total-reports-expected=${TOTAL_REPORTS_EXPECTED}" >> "$GITHUB_OUTPUT"
+          NAME="desktop-$(echo "${RUN_TYPE}" | tr '[:upper:]' '[:lower:]')"
+          if [ -n "${PR_NUMBER}" ]; then
+            COMPOSITE_IDENTITY=$(jq -nc \
+              --arg repo "${GITHUB_REPOSITORY}" --arg sha "${MM_SHA}" --arg run_id "${GITHUB_RUN_ID}" \
+              --arg name "${NAME}" --arg attempt "${GITHUB_RUN_ATTEMPT}" --arg branch "${MM_BRANCH}" --arg pr "${PR_NUMBER}" \
+              '{repository:$repo, commit_sha:$sha, gh_run_id:$run_id, name:$name, gh_run_attempt:$attempt, branch:$branch, gh_pr_number:$pr}')
+          else
+            COMPOSITE_IDENTITY=$(jq -nc \
+              --arg repo "${GITHUB_REPOSITORY}" --arg sha "${MM_SHA}" --arg run_id "${GITHUB_RUN_ID}" \
+              --arg name "${NAME}" --arg attempt "${GITHUB_RUN_ATTEMPT}" --arg branch "${MM_BRANCH}" \
+              '{repository:$repo, commit_sha:$sha, gh_run_id:$run_id, name:$name, gh_run_attempt:$attempt, branch:$branch}')
+          fi
+          echo "composite-identity-json=${COMPOSITE_IDENTITY}" >> "$GITHUB_OUTPUT"
+
+  update-initial-status:
+    name: Set pending E2E OS statuses
+    runs-on: ubuntu-24.04
+    needs:
+      - prepare-matrix
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      # Best-effort: a transient status-API hiccup here must never block the
+      # actual test matrix from running.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        continue-on-error: true
+        with:
+          ref: ${{ inputs.version_name }}
+          persist-credentials: false
+          sparse-checkout: |
+            e2e/utils/github-actions.js
+          sparse-checkout-cone-mode: false
+
+      - name: Post pending e2e/linux|macos|windows (+ policy)
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          PLATFORMS: ${{ needs.prepare-matrix.outputs.platforms }}
+          DESKTOP_SHA: ${{ needs.prepare-matrix.outputs.desktop-sha }}
+        with:
+          script: |
+            const {updateInitialOsStatuses} = require('./e2e/utils/github-actions.js');
+            await updateInitialOsStatuses({
+              github,
+              context,
+              sha: process.env.DESKTOP_SHA,
+              platforms: JSON.parse(process.env.PLATFORMS || '[]'),
+              includePolicy: true,
+            });
+
+  e2e-linux-install:
+    needs:
+      - prepare-matrix
+      - update-initial-status
+    name: E2E Linux install
+    if: ${{ needs.prepare-matrix.outputs.linux != '[]' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/e2e-install.yml
+    with:
+      runs-on: ${{ needs.prepare-matrix.outputs.linux-runner }}
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+
+  e2e-windows-install:
+    needs:
+      - prepare-matrix
+      - update-initial-status
+    name: E2E Windows install
+    if: ${{ needs.prepare-matrix.outputs.windows != '[]' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/e2e-install.yml
+    with:
+      runs-on: ${{ needs.prepare-matrix.outputs.windows-runner }}
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+
+  e2e-linux:
+    needs:
+      - prepare-matrix
+      - update-initial-status
+      - e2e-linux-install
+    name: E2E Linux (${{ matrix.shardDisplay }})
+    if: ${{ needs.prepare-matrix.outputs.linux != '[]' }}
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.prepare-matrix.outputs.linux) }}
+      fail-fast: false
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/e2e-functional-template.yml
+    with:
+      runs-on: ${{ matrix.runner }}
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+      MM_TEST_SERVER_URL: ${{ matrix.url }}
+      MM_SERVER_VERSION: ${{ inputs.MM_SERVER_VERSION }}
+      MM_TEST_USER_NAME: ${{ inputs.MM_TEST_USER_NAME }}
+      MM_TEST_PASSWORD: ${{ inputs.MM_TEST_PASSWORD }}
+      TYPE: ${{ inputs.run_type || 'PR' }}
+      shard: ${{ matrix.shard }}
+      tsio-config: ${{ format('{{"composite_identity":{0},"total_reports_expected":"{1}"}}', needs.prepare-matrix.outputs.tsio-composite-identity, needs.prepare-matrix.outputs.tsio-total-reports-expected) }}
+    secrets: inherit
+
+  e2e-macos:
+    needs:
+      - prepare-matrix
+      - update-initial-status
+    name: E2E macOS (${{ matrix.shardDisplay }})
+    if: ${{ needs.prepare-matrix.outputs.macos != '[]' }}
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.prepare-matrix.outputs.macos) }}
+      fail-fast: false
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/e2e-functional-template.yml
+    with:
+      runs-on: ${{ matrix.runner }}
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+      MM_TEST_SERVER_URL: ${{ matrix.url }}
+      MM_SERVER_VERSION: ${{ inputs.MM_SERVER_VERSION }}
+      MM_TEST_USER_NAME: ${{ inputs.MM_TEST_USER_NAME }}
+      MM_TEST_PASSWORD: ${{ inputs.MM_TEST_PASSWORD }}
+      TYPE: ${{ inputs.run_type || 'PR' }}
+      shard: ${{ matrix.shard }}
+      tsio-config: ${{ format('{{"composite_identity":{0},"total_reports_expected":"{1}"}}', needs.prepare-matrix.outputs.tsio-composite-identity, needs.prepare-matrix.outputs.tsio-total-reports-expected) }}
+    secrets: inherit
+
+  e2e-windows:
+    needs:
+      - prepare-matrix
+      - update-initial-status
+      - e2e-windows-install
+    name: E2E Windows (${{ matrix.shardDisplay }})
+    if: ${{ needs.prepare-matrix.outputs.windows != '[]' }}
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.prepare-matrix.outputs.windows) }}
+      fail-fast: false
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    uses: ./.github/workflows/e2e-functional-template.yml
+    with:
+      runs-on: ${{ matrix.runner }}
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+      MM_TEST_SERVER_URL: ${{ matrix.url }}
+      MM_SERVER_VERSION: ${{ inputs.MM_SERVER_VERSION }}
+      MM_TEST_USER_NAME: ${{ inputs.MM_TEST_USER_NAME }}
+      MM_TEST_PASSWORD: ${{ inputs.MM_TEST_PASSWORD }}
+      TYPE: ${{ inputs.run_type || 'PR' }}
+      shard: ${{ matrix.shard }}
+      tsio-config: ${{ format('{{"composite_identity":{0},"total_reports_expected":"{1}"}}', needs.prepare-matrix.outputs.tsio-composite-identity, needs.prepare-matrix.outputs.tsio-total-reports-expected) }}
+    secrets: inherit
+
+  # Flip e2e/<os> as soon as that OS's shards finish. always() still runs after a
+  # failed or timed-out shard; !cancelled() skips superseded (cancelled) PR runs.
+  # Separate needs (not one matrix job) so e2e/linux does not wait on macOS.
+  e2e-linux-status:
+    name: Post e2e/linux
+    needs:
+      - prepare-matrix
+      - e2e-linux
+    if: ${{ always() && !cancelled() && needs.prepare-matrix.outputs.linux != '[]' }}
+    permissions:
+      contents: read
+      id-token: write
+      statuses: write
+    uses: ./.github/workflows/e2e-post-os-status.yml
+    with:
+      os: linux
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+      tsio-composite-identity: ${{ needs.prepare-matrix.outputs.tsio-composite-identity }}
+      tsio-total-reports-expected: ${{ needs.prepare-matrix.outputs.tsio-total-reports-expected }}
+      min-reports: ${{ needs.prepare-matrix.outputs.linux-shard-count }}
+      upstream-jobs-succeeded: ${{ needs.e2e-linux.result == 'success' }}
+
+  e2e-macos-status:
+    name: Post e2e/macos
+    needs:
+      - prepare-matrix
+      - e2e-macos
+    if: ${{ always() && !cancelled() && needs.prepare-matrix.outputs.macos != '[]' }}
+    permissions:
+      contents: read
+      id-token: write
+      statuses: write
+    uses: ./.github/workflows/e2e-post-os-status.yml
+    with:
+      os: macos
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+      tsio-composite-identity: ${{ needs.prepare-matrix.outputs.tsio-composite-identity }}
+      tsio-total-reports-expected: ${{ needs.prepare-matrix.outputs.tsio-total-reports-expected }}
+      min-reports: ${{ needs.prepare-matrix.outputs.macos-shard-count }}
+      upstream-jobs-succeeded: ${{ needs.e2e-macos.result == 'success' }}
+
+  e2e-windows-status:
+    name: Post e2e/windows
+    needs:
+      - prepare-matrix
+      - e2e-windows
+    if: ${{ always() && !cancelled() && needs.prepare-matrix.outputs.windows != '[]' }}
+    permissions:
+      contents: read
+      id-token: write
+      statuses: write
+    uses: ./.github/workflows/e2e-post-os-status.yml
+    with:
+      os: windows
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+      tsio-composite-identity: ${{ needs.prepare-matrix.outputs.tsio-composite-identity }}
+      tsio-total-reports-expected: ${{ needs.prepare-matrix.outputs.tsio-total-reports-expected }}
+      min-reports: ${{ needs.prepare-matrix.outputs.windows-shard-count }}
+      upstream-jobs-succeeded: ${{ needs.e2e-windows.result == 'success' }}
+
+  e2e-policy-status:
+    name: Post e2e/<os>-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs:
+      - prepare-matrix
+      - e2e-policy-macos
+      - e2e-policy-windows
+    if: ${{ always() && !cancelled() }}
+    permissions:
+      contents: read
+      id-token: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.version_name }}
+          persist-credentials: false
+          sparse-checkout: |
+            e2e/utils/tsio-report-status.js
+            e2e/utils/cmt-channel-notify.js
+            e2e/utils/github-actions.js
+          sparse-checkout-cone-mode: false
+      - name: Flip e2e/macos-policy and e2e/windows-policy
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TSIO_COMPOSITE_IDENTITY: ${{ needs.prepare-matrix.outputs.tsio-composite-identity }}
+          TSIO_TOTAL_REPORTS_EXPECTED: ${{ needs.prepare-matrix.outputs.tsio-total-reports-expected }}
+          TSIO_POLL_ATTEMPTS: 24
+          TSIO_POLL_DELAY_MS: 5000
+          UPSTREAM_JOBS_SUCCEEDED: ${{ needs.e2e-policy-macos.result == 'success' && needs.e2e-policy-windows.result == 'success' }}
+        with:
+          script: |
+            const {E2E_POLICY_OS_LIST} = require('./e2e/utils/github-actions.js');
+            const {reportUrl, status, stats} = await require('./e2e/utils/tsio-report-status.js')({
+              core, context, github,
+              compositeIdentity: JSON.parse(process.env.TSIO_COMPOSITE_IDENTITY),
+              totalReportsExpected: parseInt(process.env.TSIO_TOTAL_REPORTS_EXPECTED, 10),
+              upstreamJobsSucceeded: process.env.UPSTREAM_JOBS_SUCCEEDED === 'true',
+              perOsCommitStatuses: true,
+              expectedOs: null,
+              expectedPolicyOs: E2E_POLICY_OS_LIST,
+              failOnTestFailures: true,
+              notifyChannel: false,
+              readyWhenPolicy: true,
+              minReports: E2E_POLICY_OS_LIST.length,
+            });
+            core.info(`TSIO policy ${reportUrl}: ${status} (${JSON.stringify(stats)})`);
+
+  # Per-OS E2E commit statuses (e2e/linux, e2e/macos, e2e/windows) plus
+  # e2e/macos-policy and e2e/windows-policy for the dedicated policy legs.
+  #
+  # Uses e2e/utils/tsio-report-status.js, not test-system-io-summary — summary
+  # only reads /api/v1/orchestration/status, which report-upload never
+  # populates (see that file's header comment).
+  # Channel notify lives here; merge statuses are posted by the per-OS jobs.
+  tsio-summary:
+    name: TSIO summary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs:
+      - prepare-matrix
+      - e2e-linux
+      - e2e-macos
+      - e2e-windows
+      - e2e-policy-macos
+      - e2e-policy-windows
+    if: ${{ always() && !cancelled() }}
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      statuses: write
+    steps:
+      # tsio-report-status.js is repo code, not fetched by github-script itself.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.version_name }}
+          persist-credentials: false
+          sparse-checkout: |
+            e2e/utils/tsio-report-status.js
+            e2e/utils/cmt-channel-notify.js
+            e2e/utils/github-actions.js
+          sparse-checkout-cone-mode: false
+
+      - name: Render TSIO summary + channel notify (does not flip per-OS statuses)
+        id: summary
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TSIO_COMPOSITE_IDENTITY: ${{ needs.prepare-matrix.outputs.tsio-composite-identity }}
+          TSIO_TOTAL_REPORTS_EXPECTED: ${{ needs.prepare-matrix.outputs.tsio-total-reports-expected }}
+          # Uploads (esp. screenshots) can finish minutes after Playwright; give TSIO
+          # time to attach all legs before we snapshot the group for the channel post.
+          TSIO_POLL_ATTEMPTS: 36
+          TSIO_POLL_DELAY_MS: 5000
+          UPSTREAM_JOBS_SUCCEEDED: ${{ (needs.e2e-linux.result == 'success' || needs.e2e-linux.result == 'skipped') && (needs.e2e-macos.result == 'success' || needs.e2e-macos.result == 'skipped') && (needs.e2e-windows.result == 'success' || needs.e2e-windows.result == 'skipped') && (needs.e2e-policy-macos.result == 'success' || needs.e2e-policy-macos.result == 'skipped') && (needs.e2e-policy-windows.result == 'success' || needs.e2e-policy-windows.result == 'skipped') }}
+          PLATFORMS: ${{ needs.prepare-matrix.outputs.platforms }}
+          # PR → MM_DESKTOP_E2E_WEBHOOK_URL; master → MM_E2E_MASTER_HEALTH_WEBHOOK_URL;
+          # CMT/RC uses MM_E2E_RELEASE_WEBHOOK_URL (compatibility-matrix-testing.yml).
+          # Routing is by compositeIdentity.name in cmt-channel-notify.js.
+          MATTERMOST_E2E_WEBHOOK_URL: ${{ secrets.MM_DESKTOP_E2E_WEBHOOK_URL }}
+          MATTERMOST_MASTER_HEALTH_WEBHOOK_URL: ${{ secrets.MM_E2E_MASTER_HEALTH_WEBHOOK_URL }}
+        with:
+          script: |
+            const {canonicalizeOs, E2E_POLICY_OS_LIST} = require('./e2e/utils/github-actions.js');
+            const platforms = JSON.parse(process.env.PLATFORMS || '[]');
+            const expectedOs = [...new Set(
+              platforms.map((p) => canonicalizeOs(p.platform || p.os, p.runner)).filter(Boolean),
+            )];
+            const {reportUrl, status, stats} = await require('./e2e/utils/tsio-report-status.js')({
+              core, context, github,
+              compositeIdentity: JSON.parse(process.env.TSIO_COMPOSITE_IDENTITY),
+              totalReportsExpected: parseInt(process.env.TSIO_TOTAL_REPORTS_EXPECTED, 10),
+              upstreamJobsSucceeded: process.env.UPSTREAM_JOBS_SUCCEEDED === 'true',
+              perOsCommitStatuses: false,
+              expectedOs,
+              expectedPolicyOs: E2E_POLICY_OS_LIST,
+              failOnTestFailures: true,
+              notifyChannel: true,
+            });
+            core.info(`TSIO report ${reportUrl}: ${status} (${JSON.stringify(stats)})`);
+
+  remove-e2e-label:
+    name: Remove E2E label from PR
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+      pull-requests: write
+    needs:
+      - e2e-linux
+      - e2e-macos
+      - e2e-windows
+      - e2e-policy-macos
+      - e2e-policy-windows
+      - tsio-summary
+    if: always()
+    steps:
+      - name: e2e/remove-label-from-pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true # Label might have been removed manually
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            // Use pr_number if provided directly by the dispatcher (e.g. Matterwick)
+            let prNumber = parseInt(process.env.PR_NUMBER) || null;
+
+            // Fall back to looking up the PR by head branch when pr_number was not passed
+            if (!prNumber) {
+              const run = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+              });
+              const branchName = run.data.head_branch;
+              if (branchName) {
+                const headOwner = run.data.head_repository?.owner?.login || context.repo.owner;
+                const prs = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open',
+                  head: `${headOwner}:${branchName}`,
+                });
+                if (prs.data && prs.data.length > 0) {
+                  const matchingPr = prs.data.find((pr) => pr.head && pr.head.sha === run.data.head_sha);
+                  prNumber = (matchingPr || prs.data[0]).number;
+                }
+              }
+            }
+
+            if (prNumber) {
+              try {
+                await github.rest.issues.removeLabel({
+                  issue_number: prNumber,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: 'E2E/Run',
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+                console.log('E2E/Run label already removed');
+              }
+            } else {
+              console.log('Label removal skipped - could not find associated PR');
+            }
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+
+  e2e-policy-macos:
+    name: policy-tests-macos
+    needs:
+      - prepare-matrix
+      - update-initial-status
+    if: ${{ needs.prepare-matrix.outputs.macos != '[]' }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    uses: ./.github/workflows/e2e-policy.yml
+    with:
+      platform: macos
+      runs-on: macos-26
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+      MM_SERVER_VERSION: ${{ inputs.MM_SERVER_VERSION }}
+      MM_TEST_USER_NAME: ${{ inputs.MM_TEST_USER_NAME }}
+      MM_TEST_PASSWORD: ${{ inputs.MM_TEST_PASSWORD }}
+      instance_details: ${{ inputs.instance_details }}
+      tsio-config: ${{ format('{{"composite_identity":{0},"total_reports_expected":"{1}"}}', needs.prepare-matrix.outputs.tsio-composite-identity, needs.prepare-matrix.outputs.tsio-total-reports-expected) }}
+    secrets: inherit
+
+  e2e-policy-windows:
+    name: policy-tests-windows
+    needs:
+      - prepare-matrix
+      - update-initial-status
+      - e2e-windows-install
+    if: ${{ needs.prepare-matrix.outputs.windows != '[]' }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    uses: ./.github/workflows/e2e-policy.yml
+    with:
+      platform: windows
+      # Pinned to windows-2022 (not -2025) because the 2025 image ships
+      # Visual Studio 18 / "2026", which current node-gyp doesn't recognise.
+      runs-on: windows-2022
+      DESKTOP_VERSION: ${{ inputs.version_name }}
+      MM_SERVER_VERSION: ${{ inputs.MM_SERVER_VERSION }}
+      MM_TEST_USER_NAME: ${{ inputs.MM_TEST_USER_NAME }}
+      MM_TEST_PASSWORD: ${{ inputs.MM_TEST_PASSWORD }}
+      instance_details: ${{ inputs.instance_details }}
+      tsio-config: ${{ format('{{"composite_identity":{0},"total_reports_expected":"{1}"}}', needs.prepare-matrix.outputs.tsio-composite-identity, needs.prepare-matrix.outputs.tsio-total-reports-expected) }}
+    secrets: inherit
